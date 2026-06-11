@@ -4,6 +4,7 @@
 
 # --- Secrets ---
 .env
+!frontend/.env
 *.pem
 *.key
 secrets/

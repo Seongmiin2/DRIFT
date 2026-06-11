@@ -1,0 +1,50 @@
+# Production overrides for EC2 deployment
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires Docker Compose >= 2.24.0
+#   sudo apt install docker-compose-plugin   (Ubuntu 22.04+)
+#
+# Before first run:
+#   cp .env.example .env
+#   vi .env   # set real passwords, API keys, DJANGO_ALLOWED_HOSTS=<EC2_IP>
+
+services:
+
+  # PostgreSQL — internal only (not reachable from outside EC2)
+  postgres:
+    ports: !reset []
+
+  # Redis — internal only
+  redis:
+    ports: !reset []
+
+  # Django API — gunicorn (Dockerfile CMD), no source mount
+  backend:
+    command: !reset null
+    volumes: !reset []
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-*}"
+
+  # Celery worker — engine/risk/report mounted for when modules are implemented
+  worker:
+    volumes: !reset
+      - ./contracts:/app/contracts
+      - ./engine:/app/engine
+      - ./risk:/app/risk
+      - ./report:/app/report
+
+  # Frontend — nginx serving built static files, proxies /api/ to backend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_USE_MOCK: "false"
+        VITE_API_BASE_URL: ""
+    command: !reset null
+    ports: !reset
+      - "80:80"
+    volumes: !reset []

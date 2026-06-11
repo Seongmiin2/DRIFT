@@ -7,6 +7,10 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG VITE_USE_MOCK=false
+ARG VITE_API_BASE_URL=""
+ENV VITE_USE_MOCK=$VITE_USE_MOCK
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 FROM nginx:alpine AS runner
