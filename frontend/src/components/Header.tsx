@@ -43,6 +43,19 @@ export function Header() {
         <span className="bg-navy-800 border border-navy-600 rounded px-2 py-0.5 text-cyan-400">
           MVP v0.1
         </span>
+        <span className="text-slate-600">|</span>
+        <div className="flex items-center gap-2 bg-navy-800 border border-navy-700 rounded-lg px-3 py-1.5">
+          <div className="w-6 h-6 rounded-full bg-cyan-400/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          </div>
+          <div className="leading-none">
+            <p className="text-[10px] text-slate-500 mb-0.5">KCG 상황실</p>
+            <p className="text-xs text-slate-300 font-medium">운영자</p>
+          </div>
+        </div>
       </div>
     </header>
   );
