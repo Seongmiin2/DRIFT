@@ -37,6 +37,16 @@ _COASTAL_COORDS: dict[str, tuple[float, float]] = {
 }
 
 
+# ── 보조 함수 ─────────────────────────────────────────────────────────────────
+
+def _beaufort(wind_ms: float) -> int:
+    thresholds = [0.5, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.7]
+    for i, t in enumerate(thresholds):
+        if wind_ms < t:
+            return i
+    return 12
+
+
 # ── DRI 계산 ─────────────────────────────────────────────────────────────────
 
 def _dri(wind_ms: float, current_kt: float) -> float:
@@ -163,6 +173,49 @@ def forecast_risk(
     vessels    = rng.randint(40, 180)
 
     wind_sev, wave_sev, curr_sev = _severity(wind_ms, wave_h, current_kt)
+    bft = _beaufort(wind_ms)
+
+    # ── 위험 요인 설명 (구체적) ────────────────────────────────────────────────
+    if wind_ms >= 14:
+        wind_desc = f"{wind_ms:.1f} m/s (B{bft}) — 소형어선 귀항 권고 수준, 출항 통제 검토"
+    elif wind_ms >= 10:
+        wind_desc = f"{wind_ms:.1f} m/s (B{bft}) — 조업 한계 근접, 낚시어선 출항 주의"
+    else:
+        wind_desc = f"{wind_ms:.1f} m/s (B{bft}) — 정상 운항 가능 (소형어선 한계 10 m/s)"
+
+    if wave_h >= 2.0:
+        wave_desc = f"유의파고 {wave_h:.1f} m — 소형어선 안전기준(2 m) 초과, 전복 위험"
+    elif wave_h >= 1.5:
+        wave_desc = f"유의파고 {wave_h:.1f} m — 낚시어선 제한기준(1.5 m) 초과, 선체 동요 주의"
+    else:
+        wave_desc = f"유의파고 {wave_h:.1f} m — 관찰 수준 (낚시어선 기준 1.5 m 이하)"
+
+    if current_kt >= 2.0:
+        curr_desc = f"{current_kt:.2f} kt — 급류, 협수로·어초 부근 조종 불능 위험"
+    elif current_kt >= 0.8:
+        curr_desc = f"{current_kt:.2f} kt — 빠른 조류, 소형선 이탈 주의"
+    else:
+        curr_desc = f"{current_kt:.2f} kt — 약조류, 정상 운항 가능"
+
+    # ── 권고 조치 (DRI 수준별) ─────────────────────────────────────────────────
+    if overall_dri >= 0.60:
+        actions = [
+            RecommendedAction(priority=1, action="순찰정 긴급 출동",        target="고위험 해역 즉시 봉쇄·구조 대기"),
+            RecommendedAction(priority=2, action="V-Pass 귀항 권고 발송",   target=f"조업 선박 {vessels}척 대상"),
+            RecommendedAction(priority=3, action="VHF Ch.16 경보 방송",     target="출항 통제 및 항만 입항 안내"),
+        ]
+    elif overall_dri >= 0.30:
+        actions = [
+            RecommendedAction(priority=1, action="순찰정 사전 배치",        target="주의 해역 경계 강화"),
+            RecommendedAction(priority=2, action="V-Pass 주의 알림 발송",   target=f"조업 선박 {vessels}척 대상"),
+            RecommendedAction(priority=3, action="출항 자제 안내 방송",     target="해양경계방송 송출"),
+        ]
+    else:
+        actions = [
+            RecommendedAction(priority=1, action="기상 모니터링 강화",      target="3시간 간격 재분석"),
+            RecommendedAction(priority=2, action="취약 시간대 집중 순찰",   target="일출·일몰 전후 2시간"),
+            RecommendedAction(priority=3, action="정기 위치 보고 독려",     target=f"조업 선박 {vessels}척 대상"),
+        ]
 
     return RiskForecastResult(
         forecasted_at=datetime.now(tz=timezone.utc),
@@ -176,27 +229,11 @@ def forecast_risk(
         dri_score=overall_dri,
         dri_percentile=round(overall_dri * 100, 1),
         risk_causes=[
-            RiskCause(
-                factor="풍속",
-                description=f"현재 {wind_ms} m/s  ({env.weather.source})",
-                severity=wind_sev,
-            ),
-            RiskCause(
-                factor="파고",
-                description=f"추정 유의파고 {wave_h} m  (Beaufort 경험식)",
-                severity=wave_sev,
-            ),
-            RiskCause(
-                factor="조류",
-                description=f"현재 {current_kt:.2f} kt  ({env.current.source})",
-                severity=curr_sev,
-            ),
+            RiskCause(factor="풍속", description=wind_desc, severity=wind_sev),
+            RiskCause(factor="파고", description=wave_desc, severity=wave_sev),
+            RiskCause(factor="조류", description=curr_desc, severity=curr_sev),
         ],
-        recommended_actions=[
-            RecommendedAction(priority=1, action="순찰정 사전 배치",      target="고위험 해역 경계"),
-            RecommendedAction(priority=2, action="V-Pass 주의 알림 발송", target=f"조업 선박 {vessels}척"),
-            RecommendedAction(priority=3, action="출항 주의 안내 송출",    target="해양경계방송"),
-        ],
+        recommended_actions=actions,
         max_wind_speed_ms=wind_ms,
         max_wave_height_m=wave_h,
         tidal_reversal_time=tidal_time,

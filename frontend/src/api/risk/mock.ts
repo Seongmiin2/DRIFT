@@ -95,9 +95,43 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
   const peakTime = new Date(now.getTime() + def.peakOffsetH * 3600_000);
   const endTime = new Date(now.getTime() + 3 * 3600_000);
   const tidalTime = new Date(now.getTime() + (def.peakOffsetH + 0.5) * 3600_000);
-
   const highCount = simpleHash(`${name}-vessels`) % 120 + 30;
   const highArea = parseFloat((def.baseDri * 40 + 10).toFixed(1));
+
+  const windSev: "고위험" | "주의" | "관찰" = def.maxWind >= 14 ? "고위험" : def.maxWind >= 10 ? "주의" : "관찰";
+  const waveSev: "고위험" | "주의" | "관찰" = def.maxWave >= 2.0 ? "고위험" : def.maxWave >= 1.5 ? "주의" : "관찰";
+  const tidalHH = String(peakTime.getHours()).padStart(2, "0");
+  const tidalMM = String(peakTime.getMinutes()).padStart(2, "0");
+
+  const windDesc = def.maxWind >= 14
+    ? `${def.maxWind} m/s — 소형어선 귀항 권고 수준, 출항 통제 검토`
+    : def.maxWind >= 10
+    ? `${def.maxWind} m/s — 조업 한계 근접, 낚시어선 출항 주의`
+    : `${def.maxWind} m/s — 정상 운항 가능 (소형어선 한계 10 m/s)`;
+
+  const waveDesc = def.maxWave >= 2.0
+    ? `유의파고 ${def.maxWave} m — 소형어선 안전기준(2 m) 초과, 전복 위험`
+    : def.maxWave >= 1.5
+    ? `유의파고 ${def.maxWave} m — 낚시어선 제한기준(1.5 m) 초과, 선체 동요 주의`
+    : `유의파고 ${def.maxWave} m — 관찰 수준 (낚시어선 기준 1.5 m 이하)`;
+
+  const actions = def.baseDri >= 0.60
+    ? [
+        { priority: 1, action: "순찰정 긴급 출동",      target: "고위험 해역 즉시 봉쇄·구조 대기" },
+        { priority: 2, action: "V-Pass 귀항 권고 발송", target: `조업 선박 ${highCount}척 대상` },
+        { priority: 3, action: "VHF Ch.16 경보 방송",   target: "출항 통제 및 항만 입항 안내" },
+      ]
+    : def.baseDri >= 0.30
+    ? [
+        { priority: 1, action: "순찰정 사전 배치",      target: "주의 해역 경계 강화" },
+        { priority: 2, action: "V-Pass 주의 알림 발송", target: `조업 선박 ${highCount}척 대상` },
+        { priority: 3, action: "출항 자제 안내 방송",   target: "해양경계방송 송출" },
+      ]
+    : [
+        { priority: 1, action: "기상 모니터링 강화",    target: "3시간 간격 재분석" },
+        { priority: 2, action: "취약 시간대 집중 순찰", target: "일출·일몰 전후 2시간" },
+        { priority: 3, action: "정기 위치 보고 독려",   target: `조업 선박 ${highCount}척 대상` },
+      ];
 
   return {
     forecast_id: `mock-${simpleHash(name).toString(16).slice(0, 8)}`,
@@ -112,15 +146,11 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
     dri_score: def.baseDri,
     dri_percentile: parseFloat((def.baseDri * 100).toFixed(1)),
     risk_causes: [
-      { factor: "조류 반전",  description: `${peakTime.getHours()}:${String(peakTime.getMinutes()).padStart(2, "0")} 조류 반전 예정. 표류체 방향 급변 가능성.`, severity: def.baseDri >= 0.65 ? "고위험" : "주의" },
-      { factor: "풍속 강화",  description: `최대 ${def.maxWind} m/s 예보. 소형 어선 표류 위험 증가.`,      severity: def.maxWind >= 15 ? "고위험" : "주의" },
-      { factor: "파고 상승",  description: `유의파고 최대 ${def.maxWave} m 예상.`,                        severity: def.maxWave >= 2 ? "주의" : "관찰" },
+      { factor: "풍속",     description: windDesc, severity: windSev },
+      { factor: "파고",     description: waveDesc, severity: waveSev },
+      { factor: "조류 반전", description: `${tidalHH}:${tidalMM} 조류 반전 예정 — 표류체 방향 급변, 협수로 주의`, severity: def.baseDri >= 0.65 ? "고위험" : "주의" },
     ],
-    recommended_actions: [
-      { priority: 1, action: "순찰정 사전 배치",      target: "고위험 해역 북서 경계선" },
-      { priority: 2, action: "V-Pass 주의 알림 발송", target: `해당 해역 조업 선박 ${highCount}척` },
-      { priority: 3, action: "출항 주의 안내 송출",   target: "해양경계방송" },
-    ],
+    recommended_actions: actions,
     max_wind_speed_ms: def.maxWind,
     max_wave_height_m: def.maxWave,
     tidal_reversal_time: tidalTime.toISOString(),
