@@ -280,21 +280,23 @@ def fetch_current(lat: float, lon: float, dt: datetime | None = None) -> Current
 # ---------------------------------------------------------------------------
 
 
+def _hour_of(item: dict) -> int:
+    """KHOA item에서 KST 시각(0-23) 추출."""
+    for key in ("tmFc", "tm", "fcstTime", "time", "predcDt"):
+        val = item.get(key, "")
+        if val:
+            s = str(val).replace("-", "").replace(" ", "").replace(":", "")
+            if len(s) >= 10:
+                try:
+                    return int(s[8:10])
+                except ValueError:
+                    pass
+    return 0
+
+
 def _pick_nearest_hour(items: list[dict], target_hour: int) -> dict:
     """예보 리스트에서 target_hour에 가장 가까운 항목 반환."""
-    def hour_of(item: dict) -> int:
-        for key in ("tmFc", "tm", "fcstTime", "time", "predcDt"):
-            val = item.get(key, "")
-            if val:
-                s = str(val).replace("-", "").replace(" ", "").replace(":", "")
-                if len(s) >= 10:
-                    try:
-                        return int(s[8:10])  # YYYYMMDDHH[mm]
-                    except ValueError:
-                        pass
-        return 0
-
-    return min(items, key=lambda r: abs(hour_of(r) - target_hour))
+    return min(items, key=lambda r: abs(_hour_of(r) - target_hour))
 
 
 # KHOA crdir 필드: 한국어 방위명 또는 숫자 각도
@@ -326,6 +328,106 @@ def _is_float(s: str) -> bool:
         return True
     except (ValueError, TypeError):
         return False
+
+
+# ---------------------------------------------------------------------------
+# 시간별 전체 데이터 (피크 DRI 계산용)
+# ---------------------------------------------------------------------------
+
+def fetch_current_hourly(
+    lat: float, lon: float, dt: datetime | None = None,
+) -> list[tuple[int, float, float]]:
+    """
+    KHOA 조류예보 당일 전 시간 → [(hour_kst, speed_knots, direction_deg), ...].
+    API 불통 시 빈 리스트 반환.
+    """
+    if not _API_KEY:
+        return []
+
+    dt = (dt or datetime.now()).astimezone(timezone.utc)
+    station = _nearest_station(lat, lon)
+
+    try:
+        items = _get_xml_items(_KHOA_BASE, {
+            "serviceKey": _API_KEY,
+            "pageNo":     1,
+            "numOfRows":  24,
+            "obsCode":    station["code"],
+            "year":       dt.strftime("%Y"),
+            "month":      dt.strftime("%m"),
+            "day":        dt.strftime("%d"),
+        })
+        result: list[tuple[int, float, float]] = []
+        for item in items:
+            h = _hour_of(item)
+            speed_cms = float(
+                item.get("crsp") or item.get("currntSpd") or
+                item.get("speed") or item.get("spd") or 41.2
+            )
+            raw_dir = (
+                item.get("crdir") or item.get("currntDir") or
+                item.get("drctn") or item.get("dir") or "45"
+            )
+            result.append((h, round(speed_cms / 51.444, 3), round(_parse_crdir(raw_dir) % 360, 1)))
+        return sorted(result, key=lambda x: x[0])
+    except Exception as exc:
+        logger.warning("KHOA hourly fetch failed (%s)", exc)
+        return []
+
+
+_KMA_FCST_BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst"
+
+
+def fetch_wind_forecast(
+    lat: float, lon: float, dt: datetime | None = None,
+) -> list[tuple[int, float]]:
+    """
+    KMA 초단기예보 → [(hour_kst, wind_speed_ms), ...] 최대 6시간.
+    API 불통 시 빈 리스트 반환.
+    """
+    if not _API_KEY:
+        return []
+
+    import zoneinfo as _zi
+    from datetime import timedelta as _td
+    KST = _zi.ZoneInfo("Asia/Seoul")
+    dt_kst = (dt or datetime.now(tz=timezone.utc)).astimezone(KST)
+
+    # 초단기예보 base_time: 매 시 30분 발표 (ex. 0130, 0230 …)
+    if dt_kst.minute >= 30:
+        base_dt = dt_kst.replace(minute=30, second=0, microsecond=0)
+    else:
+        base_dt = (dt_kst - _td(hours=1)).replace(minute=30, second=0, microsecond=0)
+
+    nx, ny = _latlon_to_kma_grid(lat, lon)
+
+    try:
+        data = _get_json(_KMA_FCST_BASE, {
+            "serviceKey": _API_KEY,
+            "pageNo":     1,
+            "numOfRows":  60,
+            "dataType":   "JSON",
+            "base_date":  base_dt.strftime("%Y%m%d"),
+            "base_time":  base_dt.strftime("%H%M"),
+            "nx": nx,
+            "ny": ny,
+        })
+        items = data["response"]["body"]["items"]["item"]
+        hourly: dict[int, float] = {}
+        for item in items:
+            if item.get("category") == "WSD":
+                try:
+                    hour = int(str(item.get("fcstTime", "0000"))[:2])
+                    wsd  = float(item.get("fcstValue", 0))
+                    if wsd >= 0:
+                        hourly[hour] = wsd
+                except (ValueError, TypeError):
+                    pass
+        logger.info("KMA 초단기예보 풍속: %s", hourly)
+        return sorted(hourly.items())
+    except Exception as exc:
+        logger.warning("KMA wind forecast failed (%s)", exc)
+        return []
 
 
 # ---------------------------------------------------------------------------

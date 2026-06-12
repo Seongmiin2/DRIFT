@@ -8,10 +8,13 @@ bbox 내 5×5 그리드 셀 별 DRI 를 계산하고 RiskForecastResult 를 반�
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from contracts.models import (
     RecommendedAction,
@@ -20,7 +23,7 @@ from contracts.models import (
     RiskLevel,
     VesselType,
 )
-from engine.data_fetcher import fetch_environment
+from engine.data_fetcher import fetch_environment, fetch_current_hourly, fetch_wind_forecast
 
 # KMA 초단기실황은 육상/연안 관측소만 데이터가 있음.
 # 해역별 가장 가까운 연안 관측 지점으로 날씨 쿼리 → 더 정확한 실황 수신.
@@ -161,10 +164,29 @@ def forecast_risk(
     overall_dri = round(sum(scores) / len(scores), 3)
     rng = random.Random(seed)
 
-    # ── 파생 통계 ─────────────────────────────────────────────────────────────
-    duration_h = max(0.5, (time_range_end - time_range_start).total_seconds() / 3600)
-    peak_time  = time_range_start + timedelta(hours=rng.uniform(0.5, min(duration_h * 0.7, 3.0)))
-    tidal_time = (time_range_start + timedelta(hours=rng.uniform(2.0, 6.0))) if rng.random() > 0.25 else None
+    # ── 피크 위험 시각: 당일 시간별 DRI 계산 → 최대 시각 ─────────────────────
+    import zoneinfo as _zi
+    KST = _zi.ZoneInfo("Asia/Seoul")
+
+    hourly_current = fetch_current_hourly(obs_lat, obs_lon, time_range_start)
+    wind_by_hour   = dict(fetch_wind_forecast(obs_lat, obs_lon, time_range_start))
+
+    peak_time: datetime = time_range_start  # 기본값
+    if hourly_current:
+        peak_dri_val = -1.0
+        for hour, kt, _ in hourly_current:
+            w = wind_by_hour.get(hour, wind_ms)
+            d = _dri(w, kt)
+            if d > peak_dri_val:
+                peak_dri_val = d
+                peak_time = (
+                    time_range_start.astimezone(KST)
+                    .replace(hour=hour, minute=0, second=0, microsecond=0)
+                    .astimezone(timezone.utc)
+                )
+        logger.info("실제 피크 DRI %.3f at %s KST", peak_dri_val, peak_time.astimezone(KST).strftime("%H:%M"))
+
+    tidal_time = None  # 랜덤값이었으므로 제거
 
     cw = (max_lon - min_lon) / COLS
     ch = (max_lat - min_lat) / ROWS
@@ -197,25 +219,91 @@ def forecast_risk(
     else:
         curr_desc = f"{current_kt:.2f} kt — 약조류, 정상 운항 가능"
 
-    # ── 권고 조치 (DRI 수준별) ─────────────────────────────────────────────────
-    if overall_dri >= 0.60:
-        actions = [
-            RecommendedAction(priority=1, action="순찰정 긴급 출동",        target="고위험 해역 즉시 봉쇄·구조 대기"),
-            RecommendedAction(priority=2, action="V-Pass 귀항 권고 발송",   target=f"조업 선박 {vessels}척 대상"),
-            RecommendedAction(priority=3, action="VHF Ch.16 경보 방송",     target="출항 통제 및 항만 입항 안내"),
-        ]
-    elif overall_dri >= 0.30:
-        actions = [
-            RecommendedAction(priority=1, action="순찰정 사전 배치",        target="주의 해역 경계 강화"),
-            RecommendedAction(priority=2, action="V-Pass 주의 알림 발송",   target=f"조업 선박 {vessels}척 대상"),
-            RecommendedAction(priority=3, action="출항 자제 안내 방송",     target="해양경계방송 송출"),
-        ]
+    # ── 권고 조치: 요인별(실측) + 피크 타이밍(실측) + 통신 프로토콜 ──────────────
+
+    now_utc = datetime.now(tz=timezone.utc)
+    hours_to_peak = (peak_time - now_utc).total_seconds() / 3600
+    peak_kst_str = peak_time.astimezone(KST).strftime("%H:%M")
+
+    # Action 1 — 가장 심각한 요인 기반 (실측값 근거 명시)
+    if wind_ms >= 14:
+        act1 = RecommendedAction(
+            priority=1,
+            action="소형어선 출항 통제 요청",
+            target=f"실측 풍속 {wind_ms:.1f} m/s — 소형어선 운항한계(14 m/s) 초과, 관할 어항 출항 금지 공문 발송",
+        )
+    elif wave_h >= 2.0:
+        act1 = RecommendedAction(
+            priority=1,
+            action="소형어선 운항 제한 발령",
+            target=f"추정 유의파고 {wave_h:.1f} m — 소형어선 안전기준(2.0 m) 초과, 낚시어선 포함 즉시 귀항 권고",
+        )
+    elif current_kt >= 2.0:
+        act1 = RecommendedAction(
+            priority=1,
+            action="협수로·어초 부근 통항 통제",
+            target=f"실측 조류 {current_kt:.2f} kt — 급류 구간 소형선 조종 불능 위험, 통항 일시 금지",
+        )
+    elif wind_ms >= 10:
+        act1 = RecommendedAction(
+            priority=1,
+            action="낚시어선 출항 자제 권고",
+            target=f"실측 풍속 {wind_ms:.1f} m/s — 낚시어선 운항주의보 기준(10 m/s) 초과, 자발적 귀항 유도",
+        )
     else:
-        actions = [
-            RecommendedAction(priority=1, action="기상 모니터링 강화",      target="3시간 간격 재분석"),
-            RecommendedAction(priority=2, action="취약 시간대 집중 순찰",   target="일출·일몰 전후 2시간"),
-            RecommendedAction(priority=3, action="정기 위치 보고 독려",     target=f"조업 선박 {vessels}척 대상"),
-        ]
+        act1 = RecommendedAction(
+            priority=1,
+            action="기상 모니터링 강화",
+            target=f"현재 풍속 {wind_ms:.1f} m/s·조류 {current_kt:.2f} kt — 3시간 간격 재분석, 임계치 도달 시 즉시 경보 전환",
+        )
+
+    # Action 2 — peak_risk_time 기반 (KHOA+KMA 실측 계산값)
+    if hours_to_peak > 3:
+        act2 = RecommendedAction(
+            priority=2,
+            action="순찰정 사전 배치",
+            target=f"최고 위험 예상 {peak_kst_str} ({hours_to_peak:.0f}시간 후) — 피크 2시간 전까지 고위험 해역 진입 완료",
+        )
+    elif hours_to_peak > 1:
+        act2 = RecommendedAction(
+            priority=2,
+            action="V-Pass 귀항 권고 즉시 발송",
+            target=f"최고 위험 {peak_kst_str}까지 약 {hours_to_peak:.0f}시간 — 조업 중인 소형어선 귀항 유도 개시",
+        )
+    elif hours_to_peak > 0:
+        act2 = RecommendedAction(
+            priority=2,
+            action="순찰정 긴급 출동·현장 통제",
+            target=f"최고 위험 {peak_kst_str} 1시간 이내 임박 — 고위험 해역 봉쇄, 표류 선박 수색 준비",
+        )
+    else:
+        act2 = RecommendedAction(
+            priority=2,
+            action="귀항 미확인 선박 추적",
+            target=f"피크 시각({peak_kst_str}) 경과 — V-Pass 위치 미갱신 선박 즉시 확인",
+        )
+
+    # Action 3 — DRI 수준별 통신 프로토콜
+    if overall_dri >= 0.60:
+        act3 = RecommendedAction(
+            priority=3,
+            action="VHF Ch.16 긴급 경보 방송",
+            target=f"DRI {int(overall_dri * 100)}점(고위험) — 해당 해역 전 선박 대상 출항 금지·항만 입항 안내 송출",
+        )
+    elif overall_dri >= 0.30:
+        act3 = RecommendedAction(
+            priority=3,
+            action="해양경계방송 출항 자제 안내",
+            target=f"DRI {int(overall_dri * 100)}점(주의) — 소형선 출항 자제 및 기상 악화 대비 안전 점검 권고",
+        )
+    else:
+        act3 = RecommendedAction(
+            priority=3,
+            action="정기 위치 보고 독려",
+            target=f"DRI {int(overall_dri * 100)}점(관찰) — VHF Ch.16 2시간 간격 위치 보고 요청, 일출·일몰 전후 집중 순찰",
+        )
+
+    actions = [act1, act2, act3]
 
     return RiskForecastResult(
         forecasted_at=datetime.now(tz=timezone.utc),

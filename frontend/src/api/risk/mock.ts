@@ -115,23 +115,52 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
     ? `유의파고 ${def.maxWave} m — 낚시어선 제한기준(1.5 m) 초과, 선체 동요 주의`
     : `유의파고 ${def.maxWave} m — 관찰 수준 (낚시어선 기준 1.5 m 이하)`;
 
-  const actions = def.baseDri >= 0.60
-    ? [
-        { priority: 1, action: "순찰정 긴급 출동",      target: "고위험 해역 즉시 봉쇄·구조 대기" },
-        { priority: 2, action: "V-Pass 귀항 권고 발송", target: `조업 선박 ${highCount}척 대상` },
-        { priority: 3, action: "VHF Ch.16 경보 방송",   target: "출항 통제 및 항만 입항 안내" },
-      ]
+  // Action 1 — 가장 심각한 요인 기반
+  const waveEst = parseFloat((0.0248 * def.maxWind ** 2).toFixed(1));
+  let act1: { priority: number; action: string; target: string };
+  if (def.maxWind >= 14) {
+    act1 = { priority: 1, action: "소형어선 출항 통제 요청",
+      target: `실측 풍속 ${def.maxWind} m/s — 소형어선 운항한계(14 m/s) 초과, 관할 어항 출항 금지 공문 발송` };
+  } else if (waveEst >= 2.0) {
+    act1 = { priority: 1, action: "소형어선 운항 제한 발령",
+      target: `추정 유의파고 ${waveEst} m — 소형어선 안전기준(2.0 m) 초과, 낚시어선 포함 즉시 귀항 권고` };
+  } else if (def.maxWind >= 10) {
+    act1 = { priority: 1, action: "낚시어선 출항 자제 권고",
+      target: `실측 풍속 ${def.maxWind} m/s — 낚시어선 운항주의보 기준(10 m/s) 초과, 자발적 귀항 유도` };
+  } else {
+    act1 = { priority: 1, action: "기상 모니터링 강화",
+      target: `현재 풍속 ${def.maxWind} m/s — 3시간 간격 재분석, 임계치 도달 시 즉시 경보 전환` };
+  }
+
+  // Action 2 — peakTime 기반 타이밍
+  const hoursToP = def.peakOffsetH;
+  const peakHH = String(peakTime.getHours()).padStart(2, "0");
+  const peakMM = String(peakTime.getMinutes()).padStart(2, "0");
+  const peakStr = `${peakHH}:${peakMM}`;
+  let act2: { priority: number; action: string; target: string };
+  if (hoursToP > 3) {
+    act2 = { priority: 2, action: "순찰정 사전 배치",
+      target: `최고 위험 예상 ${peakStr} (${hoursToP}시간 후) — 피크 2시간 전까지 고위험 해역 진입 완료` };
+  } else if (hoursToP > 1) {
+    act2 = { priority: 2, action: "V-Pass 귀항 권고 즉시 발송",
+      target: `최고 위험 ${peakStr}까지 약 ${hoursToP}시간 — 조업 중인 소형어선 귀항 유도 개시` };
+  } else {
+    act2 = { priority: 2, action: "순찰정 긴급 출동·현장 통제",
+      target: `최고 위험 ${peakStr} 1시간 이내 임박 — 고위험 해역 봉쇄, 표류 선박 수색 준비` };
+  }
+
+  // Action 3 — DRI 수준별 통신 프로토콜
+  const driPct = Math.round(def.baseDri * 100);
+  const act3 = def.baseDri >= 0.60
+    ? { priority: 3, action: "VHF Ch.16 긴급 경보 방송",
+        target: `DRI ${driPct}점(고위험) — 해당 해역 전 선박 대상 출항 금지·항만 입항 안내 송출` }
     : def.baseDri >= 0.30
-    ? [
-        { priority: 1, action: "순찰정 사전 배치",      target: "주의 해역 경계 강화" },
-        { priority: 2, action: "V-Pass 주의 알림 발송", target: `조업 선박 ${highCount}척 대상` },
-        { priority: 3, action: "출항 자제 안내 방송",   target: "해양경계방송 송출" },
-      ]
-    : [
-        { priority: 1, action: "기상 모니터링 강화",    target: "3시간 간격 재분석" },
-        { priority: 2, action: "취약 시간대 집중 순찰", target: "일출·일몰 전후 2시간" },
-        { priority: 3, action: "정기 위치 보고 독려",   target: `조업 선박 ${highCount}척 대상` },
-      ];
+    ? { priority: 3, action: "해양경계방송 출항 자제 안내",
+        target: `DRI ${driPct}점(주의) — 소형선 출항 자제 및 기상 악화 대비 안전 점검 권고` }
+    : { priority: 3, action: "정기 위치 보고 독려",
+        target: `DRI ${driPct}점(관찰) — VHF Ch.16 2시간 간격 위치 보고 요청, 일출·일몰 전후 집중 순찰` };
+
+  const actions = [act1, act2, act3];
 
   return {
     forecast_id: `mock-${simpleHash(name).toString(16).slice(0, 8)}`,
