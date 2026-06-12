@@ -1,4 +1,4 @@
-export const SEA_AREAS: Record<string, { bbox: [number,number,number,number] }> = {
+export const SEA_AREAS: Record<string, { bbox: [number, number, number, number] }> = {
   "연평도 인근 서해":  { bbox: [124.1, 37.6, 124.9, 38.3] },
   "인천/경기만":       { bbox: [124.5, 37.0, 126.0, 37.8] },
   "목포/신안 해역":    { bbox: [125.2, 33.8, 126.2, 34.8] },

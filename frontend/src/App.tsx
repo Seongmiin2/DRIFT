@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 import { Header } from "@/components/Header";
 import { TabBar } from "@/components/TabBar";
 import { Tab1Incident } from "@/tabs/Tab1Incident";
@@ -13,7 +13,7 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const { activeTab, setActiveTab } = useSarStore();
+  const { activeTab, setActiveTab } = useIncidentStore();
 
   return (
     <div className="flex flex-col h-screen bg-navy-950 text-slate-100 overflow-hidden">

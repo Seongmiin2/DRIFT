@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 import { api } from "@/api";
 import type { VesselType } from "@/types/contracts";
 
@@ -19,7 +19,7 @@ export function InputPanel() {
     setIsSubmitting,
     isSubmitting,
     setSelectedTimeStepHour,
-  } = useSarStore();
+  } = useIncidentStore();
 
   const [error, setError] = useState<string | null>(null);
 

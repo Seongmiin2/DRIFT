@@ -1,4 +1,4 @@
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 
 // 8-point Unicode compass arrows
 const DIR_ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
@@ -47,7 +47,7 @@ function StatItem({ label, value, sub, valueColor, bg }: StatItemProps) {
 }
 
 export function StatsBar() {
-  const { prediction, selectedTimeStepHour } = useSarStore();
+  const { prediction, selectedTimeStepHour } = useIncidentStore();
 
   if (!prediction) return null;
 

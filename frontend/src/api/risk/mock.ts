@@ -1,114 +1,7 @@
-/**
- * Mock API — serves deterministic data per request.
- * Active when VITE_USE_MOCK=true.
- */
-import type {
-  PredictionRequest,
-  EnginePredictionResult,
-  BriefingResult,
-  RiskForecastResult,
-  RiskGridCellProperties,
-  GeoJSONFeatureCollection,
-} from "@/types/contracts";
-
-import predictionResultRaw from "../../../contracts/examples/engine_prediction_result_example.json";
-import briefingResultRaw from "../../../contracts/examples/briefing_result_example.json";
-
-const predictionResult = predictionResultRaw as unknown as EnginePredictionResult;
-const briefingResult = briefingResultRaw as unknown as BriefingResult;
+import type { RiskForecastResult, RiskGridCellProperties, GeoJSONFeatureCollection } from "@/types/contracts";
 
 function delay<T>(ms: number, value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
-
-// ── Ellipse polygon (mirrors mock_engine.py logic) ─────────────────────────
-
-function makeEllipse(
-  cLon: number, cLat: number,
-  aMajor: number, bMinor: number,
-  driftDeg: number,
-  n = 24,
-): number[][] {
-  const latScale = 1 / 111.0;
-  const lonScale = 1 / (111.0 * Math.cos((cLat * Math.PI) / 180));
-  const theta = (driftDeg * Math.PI) / 180;
-  const coords: number[][] = [];
-  for (let i = 0; i < n; i++) {
-    const phi = (2 * Math.PI * i) / n;
-    const eKm = aMajor * Math.cos(phi) * Math.sin(theta) + bMinor * Math.sin(phi) * (-Math.cos(theta));
-    const nKm = aMajor * Math.cos(phi) * Math.cos(theta) + bMinor * Math.sin(phi) * Math.sin(theta);
-    coords.push([
-      parseFloat((cLon + eKm * lonScale).toFixed(6)),
-      parseFloat((cLat + nKm * latScale).toFixed(6)),
-    ]);
-  }
-  coords.push(coords[0]);
-  return coords;
-}
-
-// ── Time steps with proper ellipses + moving center ───────────────────────
-
-function buildTimeSteps(result: EnginePredictionResult): EnginePredictionResult {
-  if (result.time_steps && result.time_steps.length > 0) return result;
-
-  const totalH = result.time_horizon_hours;
-  const dv = result.drift_vector;
-  const finalCenter = result.predicted_center;
-
-  // Back-calculate origin from drift vector
-  const totalNm = dv.speed_knots * totalH;
-  const dirRad = (dv.direction_deg * Math.PI) / 180;
-  const cosLat = Math.cos((finalCenter.lat * Math.PI) / 180);
-  const dLat = (totalNm * Math.cos(dirRad)) / 60;
-  const dLon = (totalNm * Math.sin(dirRad)) / (60 * cosLat);
-  const originLat = finalCenter.lat - dLat;
-  const originLon = finalCenter.lon - dLon;
-
-  // Base radii at 6h (km), matching example JSON
-  const BASE_RADII = [3.2, 5.3, 8.4];
-  const PROBS = [0.60, 0.80, 0.95];
-
-  const time_steps = Array.from({ length: totalH }, (_, i) => {
-    const h = i + 1;
-    const frac = h / totalH;
-    const scale = Math.sqrt(h / 6.0);
-
-    const cLat = originLat + dLat * frac;
-    const cLon = originLon + dLon * frac;
-
-    const features = BASE_RADII.map((r, idx) => {
-      const rk = r * scale;
-      const a = rk * 1.35;
-      const b = rk * 0.85;
-      return {
-        type: "Feature" as const,
-        properties: {
-          priority: (idx + 1) as 1 | 2 | 3,
-          cumulative_probability: PROBS[idx],
-          area_km2: parseFloat((Math.PI * a * b).toFixed(1)),
-          center_lon: parseFloat(cLon.toFixed(6)),
-          center_lat: parseFloat(cLat.toFixed(6)),
-          radius_km: parseFloat(rk.toFixed(2)),
-        },
-        geometry: {
-          type: "Polygon" as const,
-          coordinates: [makeEllipse(cLon, cLat, a, b, dv.direction_deg)],
-        },
-      };
-    });
-
-    return {
-      hours: h,
-      search_zones: { type: "FeatureCollection" as const, features },
-      predicted_center: {
-        lon: parseFloat(cLon.toFixed(6)),
-        lat: parseFloat(cLat.toFixed(6)),
-      },
-      drift_distance_nm: parseFloat((dv.speed_knots * h).toFixed(3)),
-    };
-  });
-
-  return { ...result, time_steps };
 }
 
 // ── Sea area definitions ───────────────────────────────────────────────────
@@ -119,8 +12,8 @@ interface AreaDef {
   bbox: BBox4;
   maxWind: number;
   maxWave: number;
-  baseDri: number;    // baseline risk (0–1) for the high-risk cell
-  peakOffsetH: number; // hours from now for peak risk
+  baseDri: number;
+  peakOffsetH: number;
 }
 
 const SEA_AREAS: Record<string, AreaDef> = {
@@ -153,7 +46,6 @@ function buildRiskGrid(
   const dLon = (maxLon - minLon) / COLS;
   const dLat = (maxLat - minLat) / ROWS;
 
-  // Deterministic risk hotspot position per area
   const areaSeed = simpleHash(areaName);
   const hotspotCol = (areaSeed % 100) / 100;
   const hotspotRow = ((areaSeed >> 8) % 100) / 100;
@@ -162,19 +54,16 @@ function buildRiskGrid(
 
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      // Distance from hotspot drives spatial gradient (0 = hotspot, 1 = far corner)
       const nCol = (col + 0.5) / COLS;
       const nRow = (row + 0.5) / ROWS;
       const dist = Math.sqrt((nCol - hotspotCol) ** 2 + (nRow - hotspotRow) ** 2) / Math.SQRT2;
       const spatialFactor = 1 - dist * 0.75;
 
-      // Per-cell noise for natural variation
       const cellSeed = simpleHash(`${areaName}-${row}-${col}`);
       const noise = ((cellSeed % 1000) / 1000 - 0.5) * 0.50;
 
       const dri = Math.max(0.05, Math.min(0.97, baseDri * spatialFactor + noise));
-      const risk_level =
-        dri >= 0.65 ? "고위험" : dri >= 0.38 ? "주의" : "관찰";
+      const risk_level = dri >= 0.65 ? "고위험" : dri >= 0.38 ? "주의" : "관찰";
 
       const lon0 = minLon + col * dLon;
       const lat0 = minLat + row * dLat;
@@ -223,7 +112,7 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
     dri_score: def.baseDri,
     dri_percentile: parseFloat((def.baseDri * 100).toFixed(1)),
     risk_causes: [
-      { factor: "조류 반전",  description: `${peakTime.getHours()}:${String(peakTime.getMinutes()).padStart(2,"0")} 조류 반전 예정. 표류체 방향 급변 가능성.`, severity: def.baseDri >= 0.65 ? "고위험" : "주의" },
+      { factor: "조류 반전",  description: `${peakTime.getHours()}:${String(peakTime.getMinutes()).padStart(2, "0")} 조류 반전 예정. 표류체 방향 급변 가능성.`, severity: def.baseDri >= 0.65 ? "고위험" : "주의" },
       { factor: "풍속 강화",  description: `최대 ${def.maxWind} m/s 예보. 소형 어선 표류 위험 증가.`,      severity: def.maxWind >= 15 ? "고위험" : "주의" },
       { factor: "파고 상승",  description: `유의파고 최대 ${def.maxWave} m 예상.`,                        severity: def.maxWave >= 2 ? "주의" : "관찰" },
     ],
@@ -240,18 +129,9 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
   };
 }
 
-// ── Exported client ────────────────────────────────────────────────────────
+// ── Exported mock ──────────────────────────────────────────────────────────
 
-export const mockClient = {
-  createPrediction: (_req: PredictionRequest) =>
-    delay(800, buildTimeSteps(predictionResult)),
-
-  getPrediction: (_id: string) =>
-    delay(200, buildTimeSteps(predictionResult)),
-
-  createBriefing: (_predictionId: string) =>
-    delay(1200, briefingResult),
-
+export const riskMock = {
   getRiskForecast: (params?: { area_name?: string }) =>
     delay(600, buildRiskForecast(params?.area_name)),
 };

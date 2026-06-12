@@ -1,4 +1,4 @@
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 import { DriftMap } from "@/map/MapProvider";
 import { InputPanel } from "./InputPanel";
 import { TimeSlider } from "./TimeSlider";
@@ -13,7 +13,7 @@ const ZONE_LEGEND = [
 ];
 
 export function Tab1Incident() {
-  const { prediction, selectedTimeStepHour, predictionRequest } = useSarStore();
+  const { prediction, selectedTimeStepHour, predictionRequest } = useIncidentStore();
 
   const currentStep = prediction?.time_steps?.find(
     (s) => s.hours === selectedTimeStepHour
@@ -55,13 +55,14 @@ export function Tab1Incident() {
         })()
       : undefined);
 
-  // Uncertainty sector: fan from origin, scales with time slider
+  // Uncertainty sector: always show the full 24h cone regardless of slider position.
+  // distanceNm = speed × 24h × 3.5 so the fan is visually prominent on the chart.
   const driftSector = prediction && lastKnownPosition
     ? {
         origin: lastKnownPosition,
         directionDeg: prediction.drift_vector.direction_deg,
         halfAngleDeg: 30,
-        distanceNm: prediction.drift_vector.speed_knots * selectedTimeStepHour * 2.5,
+        distanceNm: prediction.drift_vector.speed_knots * 24 * 3.5,
       }
     : undefined;
 

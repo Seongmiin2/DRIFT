@@ -1,4 +1,4 @@
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 import { api } from "@/api";
 
 const SECTION_ICONS = ["📍", "📊", "🗺️", "⛅"];
@@ -11,7 +11,7 @@ export function BriefingSidebar() {
     isBriefingLoading,
     setIsBriefingLoading,
     setActiveTab,
-  } = useSarStore();
+  } = useIncidentStore();
 
   const handleGenerate = async () => {
     if (!prediction) return;

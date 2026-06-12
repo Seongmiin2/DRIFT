@@ -1,4 +1,4 @@
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -144,7 +144,7 @@ function SpeedBar({ ratio, color }: { ratio: number; color: string }) {
 const ZONE_COLORS = ["#ef4444", "#f97316", "#eab308"];
 
 export function WeatherPanel() {
-  const { prediction } = useSarStore();
+  const { prediction } = useIncidentStore();
 
   if (!prediction) {
     return (

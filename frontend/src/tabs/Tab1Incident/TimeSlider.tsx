@@ -1,7 +1,7 @@
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 
 export function TimeSlider() {
-  const { prediction, selectedTimeStepHour, setSelectedTimeStepHour } = useSarStore();
+  const { prediction, selectedTimeStepHour, setSelectedTimeStepHour } = useIncidentStore();
 
   if (!prediction) return null;
 

@@ -1,4 +1,4 @@
-import type { AppTab } from "@/store/sarStore";
+import type { AppTab } from "@/store/incidentStore";
 
 interface Tab {
   id: AppTab;

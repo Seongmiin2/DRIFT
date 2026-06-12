@@ -4,7 +4,7 @@ import { DriftMap } from "@/map/MapProvider";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { RiskLevel, RiskGridCellProperties, RiskForecastResult } from "@/types/contracts";
-import { SEA_AREAS } from "@/api/seaAreas";
+import { SEA_AREAS } from "@/api/risk/seaAreas";
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   고위험: "#ef4444",

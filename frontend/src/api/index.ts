@@ -1,5 +1,11 @@
-import { apiClient } from "./client";
-import { mockClient } from "./mockClient";
+import { incidentClient } from "./incident/client";
+import { incidentMock } from "./incident/mock";
+import { riskClient } from "./risk/client";
+import { riskMock } from "./risk/mock";
 
-export const api =
-  import.meta.env.VITE_USE_MOCK === "true" ? mockClient : apiClient;
+const useMock = import.meta.env.VITE_USE_MOCK === "true";
+
+export const api = {
+  ...(useMock ? incidentMock : incidentClient),
+  ...(useMock ? riskMock : riskClient),
+};

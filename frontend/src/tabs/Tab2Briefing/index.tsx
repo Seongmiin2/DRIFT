@@ -1,4 +1,4 @@
-import { useSarStore } from "@/store/sarStore";
+import { useIncidentStore } from "@/store/incidentStore";
 import { api } from "@/api";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { DriftMap } from "@/map/MapProvider";
@@ -102,7 +102,7 @@ export function Tab2Briefing() {
     briefing, setBriefing,
     isBriefingLoading, setIsBriefingLoading,
     setActiveTab,
-  } = useSarStore();
+  } = useIncidentStore();
 
   const handleGenerate = async () => {
     if (!prediction) return;

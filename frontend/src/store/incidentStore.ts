@@ -1,14 +1,9 @@
 import { create } from "zustand";
-import type {
-  EnginePredictionResult,
-  BriefingResult,
-  RiskForecastResult,
-  PredictionRequest,
-} from "@/types/contracts";
+import type { EnginePredictionResult, BriefingResult, PredictionRequest } from "@/types/contracts";
 
 export type AppTab = "incident" | "briefing" | "risk";
 
-interface SarState {
+interface IncidentState {
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
 
@@ -21,9 +16,6 @@ interface SarState {
   briefing: BriefingResult | null;
   setBriefing: (b: BriefingResult | null) => void;
 
-  riskForecast: RiskForecastResult | null;
-  setRiskForecast: (r: RiskForecastResult | null) => void;
-
   selectedTimeStepHour: number;
   setSelectedTimeStepHour: (h: number) => void;
 
@@ -34,7 +26,7 @@ interface SarState {
   setIsBriefingLoading: (v: boolean) => void;
 }
 
-export const useSarStore = create<SarState>((set) => ({
+export const useIncidentStore = create<IncidentState>((set) => ({
   activeTab: "incident",
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -51,9 +43,6 @@ export const useSarStore = create<SarState>((set) => ({
 
   briefing: null,
   setBriefing: (b) => set({ briefing: b }),
-
-  riskForecast: null,
-  setRiskForecast: (r) => set({ riskForecast: r }),
 
   selectedTimeStepHour: 24,
   setSelectedTimeStepHour: (h) => set({ selectedTimeStepHour: h }),

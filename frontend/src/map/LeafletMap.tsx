@@ -101,10 +101,10 @@ export default function LeafletMap({
           pathOptions={{
             color: "#22d3ee",
             fillColor: "#22d3ee",
-            fillOpacity: 0.06,
-            weight: 1,
-            dashArray: "5 5",
-            opacity: 0.35,
+            fillOpacity: 0.10,
+            weight: 1.5,
+            dashArray: "6 4",
+            opacity: 0.55,
           }}
         />
       )}
