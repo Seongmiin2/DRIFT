@@ -6,10 +6,13 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BASE_DIR.parent  # DRIFT/
 
-# ── contracts importable in local dev (DRIFT/contracts/)
-# In Docker: contracts/ is volume-mounted at /app/contracts/,
-#            /app is already in sys.path so 'import contracts' works.
-for _p in (str(REPO_ROOT), str(BASE_DIR)):
+# ── contracts / engine / risk importable in local dev
+# In Docker these are volume-mounted under /app/ which is already in sys.path.
+for _p in (
+    str(REPO_ROOT),            # → import contracts, import engine, import risk
+    str(BASE_DIR),
+    str(REPO_ROOT / "risk"),   # → import drift_risk  (engine_interface 호환)
+):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

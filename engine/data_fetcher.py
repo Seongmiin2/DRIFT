@@ -19,6 +19,7 @@ import math
 import os
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -67,6 +68,24 @@ def _get_json(base_url: str, params: dict) -> dict:
     logger.debug("GET %s", url)
     with urllib.request.urlopen(url, timeout=6) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _get_xml_items(base_url: str, params: dict) -> list[dict]:
+    """GET 요청 → XML 파싱 → item 리스트 반환. timeout=6s."""
+    url = base_url + "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+    logger.debug("GET %s", url)
+    with urllib.request.urlopen(url, timeout=6) as resp:
+        raw = resp.read()
+    root = ET.fromstring(raw)
+    # resultCode 확인
+    rc_el = root.find(".//resultCode")
+    if rc_el is not None and rc_el.text != "00":
+        raise ValueError(f"KHOA error code {rc_el.text}: {root.find('.//resultMsg').text if root.find('.//resultMsg') is not None else ''}")
+    items = []
+    for item_el in root.findall(".//item"):
+        row = {child.tag: (child.text or "").strip() for child in item_el}
+        items.append(row)
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +144,16 @@ def fetch_weather(lat: float, lon: float, dt: datetime | None = None) -> Weather
         logger.warning("DATA_GO_KR_API_KEY 미설정 — 기상 fallback 사용")
         return _fallback_weather()
 
-    dt = (dt or datetime.now()).astimezone(timezone.utc)
-    # 실황은 매 정시 발표 (현재 시각 기준 직전 정시)
-    base_date = dt.strftime("%Y%m%d")
-    base_time = f"{dt.hour:02d}00"
+    # KMA API 는 KST(UTC+9) 기준으로 base_date/base_time 을 받음
+    from datetime import timezone as _tz
+    import zoneinfo as _zi
+    kst = _zi.ZoneInfo("Asia/Seoul")
+    dt_kst = (dt or datetime.now(tz=_tz.utc)).astimezone(kst)
+    # 초단기실황은 매 정시 발표 — 현재 분이 10분 미만이면 직전 정시로 후퇴
+    if dt_kst.minute < 10:
+        dt_kst = dt_kst.replace(hour=(dt_kst.hour - 1) % 24, minute=0, second=0, microsecond=0)
+    base_date = dt_kst.strftime("%Y%m%d")
+    base_time = f"{dt_kst.hour:02d}00"
     nx, ny = _latlon_to_kma_grid(lat, lon)
 
     try:
@@ -149,13 +174,15 @@ def fetch_weather(lat: float, lon: float, dt: datetime | None = None) -> Weather
             cat = item.get("category", "")
             val = item.get("obsrValue", "")
             if cat == "WSD":
-                wsd = float(val)
+                v = float(val)
+                if v >= 0:   # -999 = KMA 결측 플래그, 무시
+                    wsd = v
             elif cat == "VEC":
                 # 숫자(0–360) 또는 문자("NW" 등)
                 vec = float(_VEC_MAP.get(str(val), val)) if not _is_float(val) else float(val)
 
         if wsd is None or vec is None:
-            raise ValueError(f"WSD/VEC 미수신: {[i.get('category') for i in items]}")
+            raise ValueError(f"WSD/VEC 미수신 또는 결측: wsd={wsd}, vec={vec}")
 
         logger.info("KMA 실황: 풍속=%.1f m/s, 풍향=%.0f°", wsd, vec)
         return WeatherData(wind_speed_ms=wsd, wind_direction_deg=vec % 360, source="KMA")
@@ -169,16 +196,22 @@ def fetch_weather(lat: float, lon: float, dt: datetime | None = None) -> Weather
 # KHOA 조류예보 (crntFcstTime)
 # ---------------------------------------------------------------------------
 
-_KHOA_BASE = "https://apis.data.go.kr/1192136/crntFcstTime/getCrntFcstTimeList"
+_KHOA_BASE = "https://apis.data.go.kr/1192136/crntFcstTime/GetCrntFcstTimeApiService"
 
-# 주요 조류 관측소 (가장 가까운 곳 자동 선택)
+# 조류예보 지점 코드 (KHOA LTC 형식, 실측 확인)
 _STATIONS = [
-    {"code": "DT_0028", "lon": 125.68, "lat": 37.68, "name": "연평도"},
-    {"code": "DT_0004", "lon": 126.63, "lat": 37.45, "name": "인천항"},
-    {"code": "DT_0035", "lon": 126.72, "lat": 35.98, "name": "군산항"},
-    {"code": "DT_0063", "lon": 126.38, "lat": 34.79, "name": "목포항"},
-    {"code": "DT_0006", "lon": 129.04, "lat": 35.10, "name": "부산항"},
-    {"code": "DT_0061", "lon": 129.11, "lat": 37.49, "name": "동해항"},
+    {"code": "16LTC01", "lon": 126.5486, "lat": 37.3979, "name": "인천대교"},
+    {"code": "16LTC02", "lon": 126.3821, "lat": 37.1737, "name": "인천서방"},
+    {"code": "17LTC02", "lon": 126.2155, "lat": 37.3394, "name": "연평도동방"},
+    {"code": "16LTC03", "lon": 126.4665, "lat": 36.3779, "name": "태안서방"},
+    {"code": "18LTC02", "lon": 125.8697, "lat": 36.6197, "name": "군산서방"},
+    {"code": "16LTC04", "lon": 126.2047, "lat": 34.8504, "name": "목포서방"},
+    {"code": "23LTC06", "lon": 125.9856, "lat": 34.6211, "name": "진도서방"},
+    {"code": "16LTC08", "lon": 127.7875, "lat": 34.8439, "name": "여수남방"},
+    {"code": "16LTC09", "lon": 128.4461, "lat": 34.7937, "name": "거제서방"},
+    {"code": "16LTC12", "lon": 128.9124, "lat": 34.9822, "name": "부산남방"},
+    {"code": "23LTC01", "lon": 126.9339, "lat": 33.5217, "name": "제주북서방"},
+    {"code": "23LTC02", "lon": 126.1758, "lat": 33.3680, "name": "서귀포남방"},
 ]
 
 
@@ -203,31 +236,28 @@ def fetch_current(lat: float, lon: float, dt: datetime | None = None) -> Current
     station = _nearest_station(lat, lon)
 
     try:
-        data = _get_json(_KHOA_BASE, {
+        items = _get_xml_items(_KHOA_BASE, {
             "serviceKey": _API_KEY,
             "pageNo": 1,
             "numOfRows": 24,
-            "resultType": "json",
             "obsCode": station["code"],
             "year": dt.strftime("%Y"),
             "month": dt.strftime("%m"),
             "day": dt.strftime("%d"),
         })
 
-        items = _extract_items(data)
         if not items:
             raise ValueError("빈 응답")
 
         # 현재 시각에 가장 가까운 예보 선택
         best = _pick_nearest_hour(items, dt.hour)
 
-        # 필드명 후보 (서비스마다 다를 수 있음)
+        # 필드명 후보 (GetCrntFcstTimeApiService: crsp/crdir)
         speed_cms = float(
-            best.get("currntSpd") or best.get("speed") or best.get("spd") or 41.2
+            best.get("crsp") or best.get("currntSpd") or best.get("speed") or best.get("spd") or 41.2
         )
-        direction = float(
-            best.get("currntDir") or best.get("drctn") or best.get("dir") or 45.0
-        )
+        raw_dir = best.get("crdir") or best.get("currntDir") or best.get("drctn") or best.get("dir") or "45"
+        direction = _parse_crdir(raw_dir)
 
         speed_knots = speed_cms / 51.444  # cm/s → knots
 
@@ -249,31 +279,45 @@ def fetch_current(lat: float, lon: float, dt: datetime | None = None) -> Current
 # 응답 파싱 헬퍼
 # ---------------------------------------------------------------------------
 
-def _extract_items(data: dict) -> list[dict]:
-    """data.go.kr 표준 응답에서 item 리스트 추출."""
-    try:
-        body = data["response"]["body"]
-        items = body["items"]
-        # items가 {"item": [...]} 또는 {"item": {...}} 형태
-        item = items.get("item", items)
-        return item if isinstance(item, list) else [item]
-    except (KeyError, TypeError):
-        return []
-
 
 def _pick_nearest_hour(items: list[dict], target_hour: int) -> dict:
     """예보 리스트에서 target_hour에 가장 가까운 항목 반환."""
     def hour_of(item: dict) -> int:
-        for key in ("tmFc", "tm", "fcstTime", "time"):
+        for key in ("tmFc", "tm", "fcstTime", "time", "predcDt"):
             val = item.get(key, "")
-            if val and len(str(val)) >= 10:
-                try:
-                    return int(str(val)[8:10])  # YYYYMMDDHH[mm]
-                except ValueError:
-                    pass
+            if val:
+                s = str(val).replace("-", "").replace(" ", "").replace(":", "")
+                if len(s) >= 10:
+                    try:
+                        return int(s[8:10])  # YYYYMMDDHH[mm]
+                    except ValueError:
+                        pass
         return 0
 
     return min(items, key=lambda r: abs(hour_of(r) - target_hour))
+
+
+# KHOA crdir 필드: 한국어 방위명 또는 숫자 각도
+_CRDIR_MAP = {
+    "북": 0.0, "북북동": 22.5, "북동": 45.0, "동북동": 67.5,
+    "동": 90.0, "동남동": 112.5, "남동": 135.0, "남남동": 157.5,
+    "남": 180.0, "남남서": 202.5, "남서": 225.0, "서남서": 247.5,
+    "서": 270.0, "서북서": 292.5, "북서": 315.0, "북북서": 337.5,
+    "N": 0.0, "NNE": 22.5, "NE": 45.0, "ENE": 67.5,
+    "E": 90.0, "ESE": 112.5, "SE": 135.0, "SSE": 157.5,
+    "S": 180.0, "SSW": 202.5, "SW": 225.0, "WSW": 247.5,
+    "W": 270.0, "WNW": 292.5, "NW": 315.0, "NNW": 337.5,
+}
+
+
+def _parse_crdir(val: str | float) -> float:
+    s = str(val).strip()
+    if s in _CRDIR_MAP:
+        return _CRDIR_MAP[s]
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 45.0
 
 
 def _is_float(s: str) -> bool:
