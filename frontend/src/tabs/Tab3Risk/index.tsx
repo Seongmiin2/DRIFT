@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/api";
 import { DriftMap } from "@/map/MapProvider";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import type { RiskLevel, RiskGridCellProperties, RiskForecastResult } from "@/types/contracts";
 import { SEA_AREAS } from "@/api/risk/seaAreas";
+import { loadKoreaGeoJSON, isOnLand } from "@/map/landMask";
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   고위험: "#ef4444",
@@ -18,6 +19,7 @@ export function Tab3Risk() {
   const [selectedArea, setSelectedArea] = useState(AREA_NAMES[0]);
   const [riskForecast, setRiskForecast] = useState<RiskForecastResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [landReady, setLandReady] = useState(false);
 
   useEffect(() => {
     setRiskForecast(null);
@@ -27,6 +29,23 @@ export function Tab3Risk() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [selectedArea]);
+
+  useEffect(() => {
+    loadKoreaGeoJSON().then(() => setLandReady(true)).catch(console.error);
+  }, []);
+
+  // Filter out grid cells whose center falls on land
+  const filteredForecast = useMemo<RiskForecastResult | null>(() => {
+    if (!riskForecast) return null;
+    if (!landReady) return riskForecast;
+    const seaFeatures = riskForecast.risk_grid.features.filter((f) => {
+      const coords = (f.geometry as GeoJSON.Polygon).coordinates[0];
+      const centerLon = (coords[0][0] + coords[2][0]) / 2;
+      const centerLat = (coords[0][1] + coords[2][1]) / 2;
+      return !isOnLand(centerLon, centerLat);
+    });
+    return { ...riskForecast, risk_grid: { ...riskForecast.risk_grid, features: seaFeatures } };
+  }, [riskForecast, landReady]);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -130,9 +149,9 @@ export function Tab3Risk() {
                   </svg>
                   해역 데이터 로딩 중…
                 </div>
-              ) : riskForecast ? (
+              ) : filteredForecast ? (
                 <>
-                  <RiskMap forecast={riskForecast} />
+                  <RiskMap forecast={filteredForecast} />
 
                   {/* Risk legend overlay */}
                   <div className="absolute top-3 right-3 bg-navy-900/90 border border-navy-700 rounded-lg p-3 text-xs z-[1000]">
@@ -185,8 +204,8 @@ export function Tab3Risk() {
                   </div>
                 </div>
 
-                {/* Grid cell counts */}
-                {riskForecast && <RiskSummaryBadges forecast={riskForecast} />}
+                {/* Grid cell counts (sea cells only after land filter) */}
+                {filteredForecast && <RiskSummaryBadges forecast={filteredForecast} />}
               </aside>
             )}
           </div>

@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Polyline, Polygon, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { MapProps } from "./MapProvider";
 import type { SearchZoneProperties, Coordinate } from "@/types/contracts";
+import { loadKoreaGeoJSON } from "./landMask";
 
 // Fix default icon paths broken by bundler
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -28,7 +29,6 @@ function zoneStyle(priority: number) {
   return { color, fillColor: color, fillOpacity: 0.15, weight: 2, opacity: 0.9 };
 }
 
-// Build sector polygon: fan from origin toward directionDeg ± halfAngleDeg
 function buildSectorPositions(
   origin: Coordinate,
   dirDeg: number,
@@ -38,7 +38,6 @@ function buildSectorPositions(
   const cosLat = Math.cos((origin.lat * Math.PI) / 180);
   const ARC_STEPS = 20;
   const pts: [number, number][] = [[origin.lat, origin.lon]];
-
   for (let i = 0; i <= ARC_STEPS; i++) {
     const angle = dirDeg - halfDeg + (2 * halfDeg * i) / ARC_STEPS;
     const rad = (angle * Math.PI) / 180;
@@ -55,20 +54,66 @@ function RecenterView({ center, zoom }: { center: [number, number]; zoom: number
   return null;
 }
 
+// Must render before any layer that uses these panes
+function SetupPanes() {
+  const map = useMap();
+  useEffect(() => {
+    const panes: [string, string][] = [
+      ["lyrZones", "400"],
+      ["lyrLand",  "420"],
+      ["lyrTrack", "450"],
+    ];
+    for (const [name, z] of panes) {
+      if (!map.getPane(name)) {
+        map.createPane(name).style.zIndex = z;
+      }
+    }
+  }, [map]);
+  return null;
+}
+
+// Canvas-rendered land mask — fast for 3 558 MultiPolygon features
+function KoreaLandMask({ data }: { data: GeoJSON.FeatureCollection }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map.getPane("lyrLand")) return;
+    const renderer = L.canvas({ pane: "lyrLand", padding: 0.5 });
+    const opts = {
+      renderer,
+      pane: "lyrLand",
+      style: () => ({
+        fillColor: "#0a1628",
+        fillOpacity: 0.92,
+        color: "#1e3a6e",
+        weight: 0.5,
+        opacity: 0.6,
+      }),
+    } as unknown as L.GeoJSONOptions;
+    const layer = L.geoJSON(data as unknown as GeoJSON.GeoJsonObject, opts);
+    map.addLayer(layer);
+    return () => { map.removeLayer(layer); };
+  }, [data, map]);
+  return null;
+}
+
 export default function LeafletMap({
   center, zoom = 10,
   searchZones, predictedCenter,
   lastKnownPosition, driftTrack, driftSector,
   className,
 }: MapProps) {
+  const [landGeo, setLandGeo] = useState<GeoJSON.FeatureCollection | null>(null);
+
+  useEffect(() => {
+    loadKoreaGeoJSON().then(setLandGeo).catch(console.error);
+  }, []);
+
   const leafletCenter: [number, number] = [center[1], center[0]];
 
-  // Drift track polyline positions (lat, lon pairs)
   const trackPositions: [number, number][] = driftTrack
     ? driftTrack.map((c) => [c.lat, c.lon])
     : [];
 
-  // Prepend last known position to track if available
   const fullTrack: [number, number][] =
     lastKnownPosition && trackPositions.length > 0
       ? [[lastKnownPosition.lat, lastKnownPosition.lon], ...trackPositions]
@@ -86,12 +131,14 @@ export default function LeafletMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         opacity={0.55}
       />
-
+      {/* SetupPanes must come first — its effect runs before layer effects */}
+      <SetupPanes />
       <RecenterView center={leafletCenter} zoom={zoom} />
 
-      {/* Drift uncertainty sector (fan from origin) */}
+      {/* ── lyrZones (400): sector + search zones ── */}
       {driftSector && driftSector.distanceNm > 0 && (
         <Polygon
+          pane="lyrZones"
           positions={buildSectorPositions(
             driftSector.origin,
             driftSector.directionDeg,
@@ -108,10 +155,9 @@ export default function LeafletMap({
           }}
         />
       )}
-
-      {/* Search zones (probability ellipses) */}
       {searchZones && (
         <GeoJSON
+          pane="lyrZones"
           key={JSON.stringify(searchZones)}
           data={searchZones as unknown as GeoJSON.FeatureCollection}
           style={(feature) => {
@@ -128,9 +174,13 @@ export default function LeafletMap({
         />
       )}
 
-      {/* Drift track (dotted path) */}
+      {/* ── lyrLand (420): Korea land mask — clips zones at coastline ── */}
+      {landGeo && <KoreaLandMask data={landGeo} />}
+
+      {/* ── lyrTrack (450): drift track + position markers ── */}
       {fullTrack.length >= 2 && (
         <Polyline
+          pane="lyrTrack"
           positions={fullTrack}
           pathOptions={{
             color: "#22d3ee",
@@ -140,10 +190,9 @@ export default function LeafletMap({
           }}
         />
       )}
-
-      {/* Predicted center at selected time */}
       {predictedCenter && (
         <CircleMarker
+          pane="lyrTrack"
           center={[predictedCenter.lat, predictedCenter.lon]}
           radius={6}
           pathOptions={{
@@ -154,11 +203,10 @@ export default function LeafletMap({
           }}
         />
       )}
-
-      {/* Last known position — amber pulsing ring */}
       {lastKnownPosition && (
         <>
           <CircleMarker
+            pane="lyrTrack"
             center={[lastKnownPosition.lat, lastKnownPosition.lon]}
             radius={10}
             pathOptions={{
@@ -170,6 +218,7 @@ export default function LeafletMap({
             }}
           />
           <CircleMarker
+            pane="lyrTrack"
             center={[lastKnownPosition.lat, lastKnownPosition.lon]}
             radius={4}
             pathOptions={{
