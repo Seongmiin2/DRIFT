@@ -92,10 +92,10 @@ export function Tab1Incident() {
             {/* Empty state overlay */}
             {!prediction && (
               <div className="absolute inset-0 flex items-center justify-center z-[999] pointer-events-none">
-                <div className="text-center bg-navy-900/85 rounded-xl p-8 border border-navy-700 backdrop-blur-sm">
-                  <p className="text-4xl mb-4 opacity-50">🌊</p>
-                  <p className="text-sm font-medium text-slate-300 mb-1">표류 예측을 시작하세요</p>
-                  <p className="text-xs text-slate-600">
+                <div className="text-center bg-navy-900/90 rounded-2xl p-10 border border-navy-600/60 backdrop-blur-md shadow-[0_0_40px_rgba(0,0,0,0.5)]" style={{ boxShadow: "0 0 40px rgba(0,0,0,0.5), inset 0 0 1px rgba(34,211,238,0.1)" }}>
+                  <p className="text-5xl mb-5 opacity-30">🌊</p>
+                  <p className="text-sm font-semibold text-slate-200 mb-2 tracking-wide">표류 예측을 시작하세요</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
                     좌측에서 조난 정보를 입력하고
                     <br />
                     [표류 예측 실행] 버튼을 클릭하세요

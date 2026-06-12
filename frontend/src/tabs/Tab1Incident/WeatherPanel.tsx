@@ -148,8 +148,8 @@ export function WeatherPanel() {
 
   if (!prediction) {
     return (
-      <aside className="w-72 shrink-0 flex flex-col items-center justify-center bg-navy-900 border-l border-navy-700 p-6 text-center text-slate-500 text-sm gap-3">
-        <span className="text-3xl opacity-30">🌊</span>
+      <aside className="w-72 shrink-0 flex flex-col items-center justify-center bg-gradient-to-b from-navy-900 to-navy-950 border-l border-navy-700/70 p-6 text-center text-slate-500 text-sm gap-3">
+        <span className="text-3xl opacity-20">🌊</span>
         <p>예측 실행 후<br />환경 조건이 표시됩니다</p>
       </aside>
     );
@@ -171,11 +171,14 @@ export function WeatherPanel() {
   );
 
   return (
-    <aside className="w-72 shrink-0 flex flex-col bg-navy-900 border-l border-navy-700 overflow-y-auto">
+    <aside className="w-72 shrink-0 flex flex-col bg-gradient-to-b from-navy-900 to-navy-950 border-l border-navy-700/70 overflow-y-auto">
 
       {/* Header */}
-      <div className="px-4 py-3 border-b border-navy-700">
-        <h3 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">환경 조건</h3>
+      <div className="px-4 py-3 border-b border-navy-700/60 bg-navy-800/20">
+        <div className="flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(0,212,255,0.7)]" />
+          <h3 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">환경 조건</h3>
+        </div>
       </div>
 
       {/* Compass */}

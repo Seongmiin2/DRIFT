@@ -34,11 +34,11 @@ interface StatItemProps {
 
 function StatItem({ label, value, sub, valueColor, bg }: StatItemProps) {
   return (
-    <div className="flex flex-col items-center justify-center gap-0.5 px-4 py-2"
+    <div className="flex flex-col items-center justify-center gap-0.5 px-4 py-2 transition-colors duration-150 hover:bg-navy-700/20"
       style={bg ? { background: bg } : undefined}>
-      <span className="text-[10px] text-slate-400 uppercase tracking-wider whitespace-nowrap">{label}</span>
-      <span className="text-lg font-bold font-mono leading-tight"
-        style={{ color: valueColor ?? "#22d3ee" }}>
+      <span className="text-[10px] text-slate-500 uppercase tracking-widest whitespace-nowrap">{label}</span>
+      <span className="text-lg font-bold font-mono leading-tight tracking-tight"
+        style={{ color: valueColor ?? "#22d3ee", textShadow: `0 0 12px ${(valueColor ?? "#22d3ee")}55` }}>
         {value}
       </span>
       {sub && <span className="text-[10px] text-slate-500">{sub}</span>}
@@ -60,7 +60,7 @@ export function StatsBar() {
   );
 
   return (
-    <div className="flex items-stretch border-t border-navy-700 bg-navy-800 divide-x divide-navy-700">
+    <div className="flex items-stretch border-t border-navy-700/60 bg-gradient-to-r from-navy-900 via-navy-800 to-navy-900 divide-x divide-navy-700/60">
       {/* Drift direction */}
       <StatItem
         label="표류 방향"

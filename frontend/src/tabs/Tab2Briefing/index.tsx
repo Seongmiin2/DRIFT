@@ -679,9 +679,9 @@ function BriefingLayout({
                 { label: "표류 속도", value: `${dv.speed_knots.toFixed(2)} kt`, sub: `방향 ${dv.direction_deg.toFixed(0)}°`, color: "#22d3ee" },
                 { label: "예측 시간", value: `${prediction.time_horizon_hours}시간`, sub: `파티클 ${(prediction.particle_count ?? 1000).toLocaleString()}개`, color: "#22d3ee" },
               ].map(({ label, value, sub, color }) => (
-                <div key={label} className="bg-navy-800 border border-navy-700 rounded-lg p-4">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">{label}</p>
-                  <p className="text-lg font-bold font-mono" style={{ color }}>{value}</p>
+                <div key={label} className="bg-navy-800/60 border border-navy-700/60 rounded-xl p-4 transition-colors hover:bg-navy-700/40 hover:border-navy-600/60">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1.5">{label}</p>
+                  <p className="text-lg font-bold font-mono" style={{ color, textShadow: `0 0 12px ${color}44` }}>{value}</p>
                   {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
                 </div>
               ))}
@@ -690,9 +690,9 @@ function BriefingLayout({
 
           {/* ── Generate button ───────────────────────────────────────── */}
           {!briefing && (
-            <div className="flex flex-col items-center py-10 gap-4 border border-dashed border-navy-600 rounded-xl">
+            <div className="flex flex-col items-center py-10 gap-4 border border-dashed border-navy-600/70 rounded-2xl bg-navy-800/20">
               <div className="text-center mb-2">
-                <p className="text-sm font-semibold text-slate-300 mb-1">L4 — AI 작전 브리핑 생성</p>
+                <p className="text-sm font-semibold text-slate-200 mb-1">L4 — AI 작전 브리핑 생성</p>
                 <p className="text-xs text-slate-500">
                   L1·L2·L3 분석 결과를 LLM이 종합하여 수색 작전 브리핑을 작성합니다
                 </p>
@@ -700,7 +700,7 @@ function BriefingLayout({
               <button
                 onClick={onGenerate}
                 disabled={isLoading}
-                className="px-8 py-3 rounded-lg bg-cyan-400 text-navy-950 font-bold text-sm hover:bg-cyan-300 shadow-glow disabled:opacity-50 transition-all"
+                className="px-8 py-3 rounded-lg bg-gradient-to-r from-cyan-400 to-cyan-300 text-navy-950 font-bold text-sm hover:from-cyan-300 hover:to-cyan-200 shadow-glow hover:shadow-[0_0_28px_rgba(0,212,255,0.5)] hover:scale-[1.02] active:scale-[0.99] disabled:opacity-50 transition-all duration-200"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2.5"><Spinner small />브리핑 생성 중…</span>

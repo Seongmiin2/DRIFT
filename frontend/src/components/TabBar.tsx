@@ -35,7 +35,7 @@ interface TabBarProps {
 
 export function TabBar({ active, onChange }: TabBarProps) {
   return (
-    <nav className="flex border-b border-navy-700 bg-navy-900">
+    <nav className="flex border-b border-navy-700/80 bg-gradient-to-b from-navy-900 to-navy-950/80">
       {TABS.map((tab) => {
         const isActive = tab.id === active;
         return (
@@ -43,20 +43,26 @@ export function TabBar({ active, onChange }: TabBarProps) {
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={[
-              "relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors",
-              "hover:text-cyan-300 focus:outline-none",
+              "relative flex items-center gap-2.5 px-6 py-3 text-sm font-medium transition-all duration-200",
+              "focus:outline-none",
               isActive
-                ? "text-white border-b-2 border-cyan-400 bg-navy-800"
-                : "text-slate-400 border-b-2 border-transparent",
+                ? "text-white border-b-2 border-cyan-400 bg-gradient-to-b from-navy-700/50 to-transparent"
+                : "text-slate-400 border-b-2 border-transparent hover:text-slate-200 hover:bg-navy-800/30",
             ].join(" ")}
           >
-            <span className="text-base leading-none">{tab.icon}</span>
+            <span className={[
+              "text-base leading-none transition-all duration-200",
+              isActive ? "drop-shadow-[0_0_6px_rgba(0,212,255,0.6)]" : "opacity-60",
+            ].join(" ")}>{tab.icon}</span>
             <span className="flex flex-col items-start">
               <span className="leading-tight">{tab.label}</span>
-              <span className="text-[10px] opacity-60 leading-tight">{tab.sublabel}</span>
+              <span className={[
+                "text-[10px] leading-tight transition-colors duration-200",
+                isActive ? "text-cyan-400/60" : "opacity-50",
+              ].join(" ")}>{tab.sublabel}</span>
             </span>
             {isActive && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400/0 via-cyan-400 to-cyan-400/0" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400/0 via-cyan-400 to-cyan-400/0 shadow-[0_0_8px_rgba(0,212,255,0.6)]" />
             )}
           </button>
         );

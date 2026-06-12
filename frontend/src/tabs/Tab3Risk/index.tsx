@@ -203,11 +203,14 @@ export function Tab3Risk() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── 좌측 패널 ──────────────────────────────────────────────────── */}
-        <aside className="w-64 shrink-0 bg-navy-900 border-r border-navy-700 flex flex-col overflow-y-auto">
-          <div className="p-4 border-b border-navy-700">
-            <h2 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-3">
-              해역 선택
-            </h2>
+        <aside className="w-64 shrink-0 bg-gradient-to-b from-navy-900 to-navy-950 border-r border-navy-700/70 flex flex-col overflow-y-auto">
+          <div className="p-4 border-b border-navy-700/60">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-1 h-4 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(0,212,255,0.7)]" />
+              <h2 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
+                해역 선택
+              </h2>
+            </div>
             <div className="flex flex-col gap-1">
               {AREA_NAMES.map((name) => (
                 <button
@@ -229,8 +232,8 @@ export function Tab3Risk() {
           {/* DRI 게이지 + 통계 */}
           {riskForecast && !loading && (
             <div className="p-4 flex flex-col gap-4">
-              <div className="bg-navy-800 border border-navy-700 rounded-lg p-4 text-center">
-                <p className="text-xs text-slate-400 mb-2">Drift Risk Index</p>
+              <div className="bg-navy-800/60 border border-navy-600/50 rounded-xl p-4 text-center shadow-inner">
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Drift Risk Index</p>
                 <DriGauge score={riskForecast.dri_score} peakTime={riskForecast.peak_risk_time} />
               </div>
 
@@ -241,8 +244,8 @@ export function Tab3Risk() {
                   { label: "조류 속도", value: `${riskForecast.max_current_speed_kt} kt` },
                   { label: "고위험 면적", value: `${riskForecast.high_risk_area_km2} km²` },
                 ].map(({ label, value }) => (
-                  <div key={label} className="bg-navy-800 border border-navy-700 rounded p-2">
-                    <p className="text-slate-500">{label}</p>
+                  <div key={label} className="bg-navy-800/50 border border-navy-700/60 rounded-lg p-2.5 transition-colors hover:bg-navy-700/40">
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-0.5">{label}</p>
                     <p className="text-cyan-300 font-mono font-semibold">{value}</p>
                   </div>
                 ))}
@@ -419,123 +422,125 @@ export function Tab3Risk() {
             </div>
           )}
 
-          {/* 위험 요인 · 권고 조치 패널 (우하단) */}
-          {riskForecast && !loading && (
-            <div className="absolute bottom-3 right-3 z-[1000] w-64 bg-navy-900/90 border border-navy-700 rounded-lg p-3 text-xs">
-              {/* 위험 요인 */}
-              <p className="text-white font-medium mb-2">위험 요인</p>
-              {riskForecast.risk_causes.map((cause, i) => (
-                <div key={i} className="flex items-start gap-2 mb-1.5">
-                  <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: RISK_COLOR[cause.severity] }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-white font-medium">{cause.factor}</span>
-                      <span className="ml-auto shrink-0 text-[10px] px-1 py-px rounded"
-                        style={{ color: RISK_COLOR[cause.severity], background: `${RISK_COLOR[cause.severity]}20` }}>
-                        {cause.severity}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-slate-300 leading-snug mt-px">{cause.description}</p>
-                  </div>
-                </div>
-              ))}
-              {riskForecast.tidal_reversal_time && (
-                <div className="flex items-start gap-2 mb-1.5">
-                  <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-white font-medium">조류 반전</span>
-                      <span className="ml-auto shrink-0 text-[10px] px-1 py-px rounded text-amber-400 bg-amber-400/15">주의</span>
-                    </div>
-                    <p className="text-[10px] text-slate-300 leading-snug mt-px">
-                      예상 {new Date(riskForecast.tidal_reversal_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} — 협수로 통항 주의
-                    </p>
-                  </div>
-                </div>
-              )}
+          {/* 우하단 패널 묶음: 범례 + 위험 요인·권고 조치 */}
+          <div className="absolute bottom-3 right-3 z-[1000] flex flex-col gap-2 w-64">
 
-              {/* 구분선 */}
-              <div className="mt-2 pt-2 border-t border-navy-700">
-                <p className="text-white font-medium mb-2">권고 조치</p>
-                {riskForecast.recommended_actions.map((action) => (
-                  <div key={action.priority} className="flex items-start gap-2 mb-1.5">
-                    <span className={[
-                      "shrink-0 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center mt-0.5",
-                      action.priority === 1 ? "bg-red-500 text-white"
-                        : action.priority === 2 ? "bg-amber-500 text-white"
-                        : "bg-navy-600 text-slate-200",
-                    ].join(" ")}>{action.priority}</span>
-                    <div>
-                      <p className="text-white">{action.action}</p>
-                      <p className="text-[10px] text-slate-300 mt-px">{action.target}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            {/* 범례 — 2열 가로 배치 */}
+            <div className="bg-navy-900/90 border border-navy-700 rounded-lg p-3 text-xs flex gap-0">
 
-          {/* 범례 */}
-          <div className="absolute top-3 right-3 bg-navy-900/90 border border-navy-700 rounded-lg p-3 text-xs z-[1000] min-w-[148px]">
-            {/* 사고 이력 레이어 토글 */}
-            <button
-              onClick={() => setShowHotspots((v) => !v)}
-              className="flex items-center gap-1.5 w-full text-left mb-1.5 hover:opacity-80 transition-opacity"
-            >
-              <span className="text-slate-400 font-medium">과거 사고 이력</span>
-              <span className={[
-                "ml-auto text-[10px] px-1.5 py-0.5 rounded font-semibold",
-                showHotspots
-                  ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
-                  : "bg-navy-600 text-slate-500 border border-navy-500",
-              ].join(" ")}>
-                {showHotspots ? "ON" : "OFF"}
-              </span>
-            </button>
-            {showHotspots && (
-              <>
-                <div className="flex items-center gap-2 mb-1">
+              {/* 왼쪽: 과거 사고 이력 */}
+              <div className="flex flex-col gap-1.5 pr-3 flex-1">
+                <button
+                  onClick={() => setShowHotspots((v) => !v)}
+                  className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                >
+                  <span className="text-slate-400 font-medium whitespace-nowrap">과거 사고 이력</span>
+                  <span className={[
+                    "ml-auto text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                    showHotspots
+                      ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                      : "bg-navy-600 text-slate-500 border border-navy-500",
+                  ].join(" ")}>
+                    {showHotspots ? "ON" : "OFF"}
+                  </span>
+                </button>
+                <div className="flex items-center gap-2">
                   <span className="w-4 h-3 rounded-sm shrink-0"
-                    style={{ border: "3px solid #a855f7", background: "transparent" }} />
-                  <span className="text-slate-400">사고다발구역</span>
+                    style={{ border: "2.5px solid #a855f7", background: "transparent" }} />
+                  <span className={showHotspots ? "text-slate-400" : "text-slate-600"}>사고다발구역</span>
                 </div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2">
                   <span className="w-4 h-3 rounded-sm shrink-0"
                     style={{ border: "2px dashed #c084fc", background: "transparent" }} />
-                  <span className="text-slate-400">주의구역</span>
+                  <span className={showHotspots ? "text-slate-400" : "text-slate-600"}>주의구역</span>
                 </div>
-                {areaHotspots && (
-                  <p className="text-slate-600 mb-1 text-[10px]">
+                {areaHotspots && showHotspots && (
+                  <p className="text-[10px] text-slate-600">
                     {areaHotspots.features.filter(f => (f.properties as HotspotProperties).zone === "사고다발구역").length}개 다발 ·{" "}
                     {areaHotspots.features.filter(f => (f.properties as HotspotProperties).zone === "주의구역").length}개 주의
                   </p>
                 )}
-              </>
-            )}
+              </div>
 
-            {/* 해양경보 등급 */}
-            <div className="mt-2 pt-2 border-t border-navy-700">
-              <p className="text-slate-400 font-medium mb-2">해양경보 등급</p>
-              {(["고위험", "주의", "관찰"] as RiskLevel[]).map((lvl) => (
-                <div key={lvl} className="flex items-center gap-2 mb-1.5">
-                  <span className="w-4 h-3 rounded-sm border"
-                    style={{
-                      background: HEATMAP_STYLE[lvl].fillColor as string,
-                      borderColor: HEATMAP_STYLE[lvl].color as string,
-                      opacity: 1,
-                    }} />
-                  <span className="text-slate-300">{lvl}</span>
-                </div>
-              ))}
-              {areaHotspots && areaHotspots.features.length > 0 ? (
-                <p className="mt-1.5 text-[10px] text-slate-500">채도 = 사고 빈도 (진할수록 높음)</p>
-              ) : filteredForecast ? (
-                <div className="mt-2 pt-2 border-t border-navy-700 space-y-0.5">
-                  <GridCounts forecast={filteredForecast} />
-                </div>
-              ) : null}
+              {/* 세로 구분선 */}
+              <div className="w-px bg-navy-700 self-stretch mx-0.5" />
+
+              {/* 오른쪽: 해양경보 등급 */}
+              <div className="flex flex-col gap-1.5 pl-3">
+                <p className="text-slate-400 font-medium">해양경보 등급</p>
+                {(["고위험", "주의", "관찰"] as RiskLevel[]).map((lvl) => (
+                  <div key={lvl} className="flex items-center gap-2">
+                    <span className="w-4 h-3 rounded-sm border shrink-0"
+                      style={{
+                        background: HEATMAP_STYLE[lvl].fillColor as string,
+                        borderColor: HEATMAP_STYLE[lvl].color as string,
+                      }} />
+                    <span className="text-slate-300">{lvl}</span>
+                  </div>
+                ))}
+                {areaHotspots && areaHotspots.features.length > 0 ? (
+                  <p className="text-[10px] text-slate-500">채도 = 사고 빈도</p>
+                ) : filteredForecast ? (
+                  <div className="mt-1 space-y-0.5">
+                    <GridCounts forecast={filteredForecast} />
+                  </div>
+                ) : null}
+              </div>
             </div>
+
+            {/* 위험 요인 · 권고 조치 */}
+            {riskForecast && !loading && (
+              <div className="bg-navy-900/90 border border-navy-700 rounded-lg p-3 text-xs">
+                <p className="text-white font-medium mb-2">위험 요인</p>
+                {riskForecast.risk_causes.map((cause, i) => (
+                  <div key={i} className="flex items-start gap-2 mb-1.5">
+                    <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: RISK_COLOR[cause.severity] }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-white font-medium">{cause.factor}</span>
+                        <span className="ml-auto shrink-0 text-[10px] px-1 py-px rounded"
+                          style={{ color: RISK_COLOR[cause.severity], background: `${RISK_COLOR[cause.severity]}20` }}>
+                          {cause.severity}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-snug mt-px">{cause.description}</p>
+                    </div>
+                  </div>
+                ))}
+                {riskForecast.tidal_reversal_time && (
+                  <div className="flex items-start gap-2 mb-1.5">
+                    <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-amber-400" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-white font-medium">조류 반전</span>
+                        <span className="ml-auto shrink-0 text-[10px] px-1 py-px rounded text-amber-400 bg-amber-400/15">주의</span>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-snug mt-px">
+                        예상 {new Date(riskForecast.tidal_reversal_time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} — 협수로 통항 주의
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-2 pt-2 border-t border-navy-700">
+                  <p className="text-white font-medium mb-2">권고 조치</p>
+                  {riskForecast.recommended_actions.map((action) => (
+                    <div key={action.priority} className="flex items-start gap-2 mb-1.5">
+                      <span className={[
+                        "shrink-0 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center mt-0.5",
+                        action.priority === 1 ? "bg-red-500 text-white"
+                          : action.priority === 2 ? "bg-amber-500 text-white"
+                          : "bg-navy-600 text-slate-200",
+                      ].join(" ")}>{action.priority}</span>
+                      <div>
+                        <p className="text-white">{action.action}</p>
+                        <p className="text-[10px] text-slate-300 mt-px">{action.target}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -565,7 +570,7 @@ function DriGauge({ score, peakTime }: { score: number; peakTime: string }) {
   );
 }
 
-function GridCounts({ forecast }: { forecast: RiskForecastResult }) {
+function GridCounts({ forecast, inline }: { forecast: RiskForecastResult; inline?: boolean }) {
   const counts = forecast.risk_grid.features.reduce(
     (acc, f) => {
       const lvl = (f.properties as RiskGridCellProperties).risk_level as RiskLevel;
@@ -574,6 +579,20 @@ function GridCounts({ forecast }: { forecast: RiskForecastResult }) {
     },
     {} as Record<RiskLevel, number>,
   );
+  if (inline) {
+    return (
+      <>
+        {(["고위험", "주의", "관찰"] as RiskLevel[]).map((lvl) => (
+          <span key={lvl} className="flex items-center gap-1 shrink-0">
+            <span className="text-slate-500 whitespace-nowrap">{lvl}</span>
+            <span className="font-mono font-semibold whitespace-nowrap" style={{ color: RISK_COLOR[lvl] }}>
+              {counts[lvl] ?? 0}셀
+            </span>
+          </span>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {(["고위험", "주의", "관찰"] as RiskLevel[]).map((lvl) => (

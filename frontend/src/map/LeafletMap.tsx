@@ -104,24 +104,34 @@ export default function LeafletMap({
         />
       )}
 
-      {/* Search zones (probability ellipses) */}
-      {searchZones && (
-        <GeoJSON
-          key={JSON.stringify(searchZones)}
-          data={searchZones as unknown as GeoJSON.FeatureCollection}
-          style={(feature) => {
-            const props = feature?.properties as SearchZoneProperties | undefined;
-            return zoneStyle(props?.priority ?? 3);
-          }}
-          onEachFeature={(feature, layer) => {
-            const props = feature.properties as SearchZoneProperties;
-            layer.bindTooltip(
-              `${ZONE_LABELS[props.priority as 1 | 2 | 3]} · ${props.area_km2.toFixed(1)} km²`,
-              { permanent: false, className: "drift-tooltip" },
-            );
-          }}
-        />
-      )}
+      {/* Search zones — priority 3→2→1 순서로 렌더 (1순위가 맨 위) */}
+      {searchZones && (() => {
+        const sorted = {
+          ...searchZones,
+          features: [...searchZones.features].sort(
+            (a, b) =>
+              (b.properties as SearchZoneProperties).priority -
+              (a.properties as SearchZoneProperties).priority,
+          ),
+        };
+        return (
+          <GeoJSON
+            key={JSON.stringify(searchZones)}
+            data={sorted as unknown as GeoJSON.FeatureCollection}
+            style={(feature) => {
+              const props = feature?.properties as SearchZoneProperties | undefined;
+              return zoneStyle(props?.priority ?? 3);
+            }}
+            onEachFeature={(feature, layer) => {
+              const props = feature.properties as SearchZoneProperties;
+              layer.bindTooltip(
+                `${ZONE_LABELS[props.priority as 1 | 2 | 3]} · ${props.area_km2.toFixed(1)} km²`,
+                { permanent: false, className: "drift-tooltip" },
+              );
+            }}
+          />
+        );
+      })()}
 
       {/* Drift track (dotted path) */}
       {fullTrack.length >= 2 && (
