@@ -3,7 +3,7 @@ import { DriftMap } from "@/map/MapProvider";
 import { InputPanel } from "./InputPanel";
 import { TimeSlider } from "./TimeSlider";
 import { StatsBar } from "./StatsBar";
-import { BriefingSidebar } from "./BriefingSidebar";
+import { WeatherPanel } from "./WeatherPanel";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 
 const ZONE_LEGEND = [
@@ -19,6 +19,7 @@ export function Tab1Incident() {
     (s) => s.hours === selectedTimeStepHour
   );
 
+  // Map center follows current time step prediction
   const mapCenter: [number, number] = prediction
     ? [
         currentStep?.predicted_center.lon ?? prediction.predicted_center.lon,
@@ -30,8 +31,25 @@ export function Tab1Incident() {
       ];
 
   const searchZones = currentStep?.search_zones ?? prediction?.search_zones;
-  const predictedCenter =
-    currentStep?.predicted_center ?? prediction?.predicted_center;
+  const predictedCenter = currentStep?.predicted_center ?? prediction?.predicted_center;
+
+  // Drift track: positions from t=1h up to selectedTimeStepHour
+  const driftTrack = prediction?.time_steps
+    ?.filter((s) => s.hours <= selectedTimeStepHour)
+    .map((s) => s.predicted_center) ?? [];
+
+  // Last known signal position (input origin)
+  const lastKnownPosition = predictionRequest.last_coordinate;
+
+  // Uncertainty sector from origin
+  const driftSector = prediction && lastKnownPosition
+    ? {
+        origin: lastKnownPosition,
+        directionDeg: prediction.drift_vector.direction_deg,
+        halfAngleDeg: 22,
+        distanceNm: (prediction.drift_vector.speed_knots * selectedTimeStepHour) * 1.5,
+      }
+    : undefined;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -46,6 +64,9 @@ export function Tab1Incident() {
               zoom={prediction ? 10 : 8}
               searchZones={searchZones}
               predictedCenter={predictedCenter}
+              lastKnownPosition={lastKnownPosition}
+              driftTrack={driftTrack}
+              driftSector={driftSector}
               className="h-full w-full"
             />
 
@@ -54,9 +75,7 @@ export function Tab1Incident() {
               <div className="absolute inset-0 flex items-center justify-center z-[999] pointer-events-none">
                 <div className="text-center bg-navy-900/85 rounded-xl p-8 border border-navy-700 backdrop-blur-sm">
                   <p className="text-4xl mb-4 opacity-50">🌊</p>
-                  <p className="text-sm font-medium text-slate-300 mb-1">
-                    표류 예측을 시작하세요
-                  </p>
+                  <p className="text-sm font-medium text-slate-300 mb-1">표류 예측을 시작하세요</p>
                   <p className="text-xs text-slate-600">
                     좌측에서 조난 정보를 입력하고
                     <br />
@@ -72,26 +91,21 @@ export function Tab1Incident() {
                 <p className="text-slate-400 font-medium mb-2">수색 구역</p>
                 {ZONE_LEGEND.map(({ color, label }) => (
                   <div key={label} className="flex items-center gap-2 mb-1">
-                    <span
-                      className="w-3 h-3 rounded-sm border"
-                      style={{
-                        borderColor: color,
-                        backgroundColor: `${color}30`,
-                      }}
-                    />
+                    <span className="w-3 h-3 rounded-sm border"
+                      style={{ borderColor: color, backgroundColor: `${color}30` }} />
                     <span className="text-slate-400">{label}</span>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Model weights badge */}
-            {prediction && (
-              <div className="absolute bottom-3 left-3 bg-navy-900/90 border border-navy-700 rounded-lg p-2 text-[10px] z-[1000] font-mono text-slate-400">
-                <span className="text-slate-500">가중치: </span>
-                L1 {((prediction.weight_l1 ?? 0.3) * 100).toFixed(0)}% · L2{" "}
-                {((prediction.weight_l2 ?? 0.5) * 100).toFixed(0)}% · L3{" "}
-                {((prediction.weight_l3 ?? 0.2) * 100).toFixed(0)}%
+                <div className="border-t border-navy-700 mt-2 pt-2 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-0.5 border-t-2 border-dashed border-cyan-400/50 inline-block" />
+                    <span className="text-slate-500">표류 경로</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 border border-amber-400 inline-block" />
+                    <span className="text-slate-500">최종 신호 위치</span>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -100,7 +114,7 @@ export function Tab1Incident() {
           {prediction && <StatsBar />}
         </div>
 
-        <BriefingSidebar />
+        <WeatherPanel />
       </div>
       <DisclaimerBanner />
     </div>

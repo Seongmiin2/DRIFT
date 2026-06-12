@@ -40,13 +40,14 @@ export const useSarStore = create<SarState>((set) => ({
 
   predictionRequest: {
     vessel_type: "소형어선",
-    simulation_hours: 6,
+    simulation_hours: 24,
+    last_seen_at: new Date().toISOString(),
   },
   setPredictionRequest: (req) =>
     set((s) => ({ predictionRequest: { ...s.predictionRequest, ...req } })),
 
   prediction: null,
-  setPrediction: (p) => set({ prediction: p, selectedTimeStepHour: p?.time_horizon_hours ?? 6 }),
+  setPrediction: (p) => set({ prediction: p, selectedTimeStepHour: p?.time_horizon_hours ?? 24 }),
 
   briefing: null,
   setBriefing: (b) => set({ briefing: b }),
@@ -54,7 +55,7 @@ export const useSarStore = create<SarState>((set) => ({
   riskForecast: null,
   setRiskForecast: (r) => set({ riskForecast: r }),
 
-  selectedTimeStepHour: 6,
+  selectedTimeStepHour: 24,
   setSelectedTimeStepHour: (h) => set({ selectedTimeStepHour: h }),
 
   isSubmitting: false,

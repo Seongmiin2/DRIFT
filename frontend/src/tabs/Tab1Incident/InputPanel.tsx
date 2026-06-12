@@ -38,7 +38,7 @@ export function InputPanel() {
         vessel_type: predictionRequest.vessel_type ?? "소형어선",
         vessel_id: predictionRequest.vessel_id ?? undefined,
         tonnage_tons: predictionRequest.tonnage_tons ?? undefined,
-        simulation_hours: predictionRequest.simulation_hours ?? 6,
+        simulation_hours: 24,
         notes: predictionRequest.notes ?? undefined,
       };
       const result = await api.createPrediction(req);
@@ -137,7 +137,7 @@ export function InputPanel() {
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-slate-400">최종 확인 시각 *</label>
+        <label className="text-xs text-slate-400">최종 확인 시각</label>
         <input
           type="datetime-local"
           value={
@@ -153,29 +153,7 @@ export function InputPanel() {
             })
           }
           className="input-field"
-          required
         />
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-slate-400">
-          시뮬레이션 시간: {predictionRequest.simulation_hours ?? 6}h
-        </label>
-        <input
-          type="range"
-          min="1"
-          max="24"
-          step="1"
-          value={predictionRequest.simulation_hours ?? 6}
-          onChange={(e) =>
-            setPredictionRequest({ simulation_hours: parseInt(e.target.value) })
-          }
-          className="w-full accent-cyan-400"
-        />
-        <div className="flex justify-between text-[10px] text-slate-500">
-          <span>1h</span>
-          <span>24h</span>
-        </div>
       </div>
 
       <div className="flex flex-col gap-1">
