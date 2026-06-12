@@ -23,7 +23,7 @@ export function Header() {
           <path d="M4 16 H28" stroke="#00d4ff" strokeWidth="0.8" opacity="0.4" />
         </svg>
         <div>
-          <h1 className="text-lg font-bold tracking-widest text-cyan-400 leading-none">
+          <h1 className="text-lg font-bold tracking-widest text-white leading-none">
             DRIFT
           </h1>
           <p className="text-[10px] text-slate-400 tracking-wide leading-none mt-0.5">

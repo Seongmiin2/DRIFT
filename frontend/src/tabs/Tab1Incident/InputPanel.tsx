@@ -23,6 +23,26 @@ export function InputPanel() {
 
   const [error, setError] = useState<string | null>(null);
 
+  const initLon = predictionRequest.last_coordinate?.lon;
+  const initLat = predictionRequest.last_coordinate?.lat;
+  const [lonInput, setLonInput] = useState<string>(
+    initLon != null && !isNaN(initLon) ? String(initLon) : ""
+  );
+  const [latInput, setLatInput] = useState<string>(
+    initLat != null && !isNaN(initLat) ? String(initLat) : ""
+  );
+
+  const syncCoord = (lon: string, lat: string) => {
+    const lonVal = parseFloat(lon);
+    const latVal = parseFloat(lat);
+    setPredictionRequest({
+      last_coordinate:
+        !isNaN(lonVal) && !isNaN(latVal)
+          ? { lon: lonVal, lat: latVal }
+          : undefined,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -59,7 +79,7 @@ export function InputPanel() {
       onSubmit={handleSubmit}
       className="flex flex-col gap-4 p-4 bg-navy-900 border-r border-navy-700 w-72 shrink-0 overflow-y-auto"
     >
-      <h2 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider">
+      <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
         조난 정보 입력
       </h2>
 
@@ -103,15 +123,11 @@ export function InputPanel() {
             min="123"
             max="133"
             placeholder="124.372"
-            value={predictionRequest.last_coordinate?.lon ?? ""}
-            onChange={(e) =>
-              setPredictionRequest({
-                last_coordinate: {
-                  lon: parseFloat(e.target.value),
-                  lat: predictionRequest.last_coordinate?.lat ?? 37.959,
-                },
-              })
-            }
+            value={lonInput}
+            onChange={(e) => {
+              setLonInput(e.target.value);
+              syncCoord(e.target.value, latInput);
+            }}
             className="input-field"
             required
           />
@@ -124,15 +140,11 @@ export function InputPanel() {
             min="32"
             max="40"
             placeholder="37.959"
-            value={predictionRequest.last_coordinate?.lat ?? ""}
-            onChange={(e) =>
-              setPredictionRequest({
-                last_coordinate: {
-                  lon: predictionRequest.last_coordinate?.lon ?? 124.372,
-                  lat: parseFloat(e.target.value),
-                },
-              })
-            }
+            value={latInput}
+            onChange={(e) => {
+              setLatInput(e.target.value);
+              syncCoord(lonInput, e.target.value);
+            }}
             className="input-field"
             required
           />

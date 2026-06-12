@@ -46,7 +46,7 @@ export function TabBar({ active, onChange }: TabBarProps) {
               "relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors",
               "hover:text-cyan-300 focus:outline-none",
               isActive
-                ? "text-cyan-400 border-b-2 border-cyan-400 bg-navy-800"
+                ? "text-white border-b-2 border-cyan-400 bg-navy-800"
                 : "text-slate-400 border-b-2 border-transparent",
             ].join(" ")}
           >

@@ -25,10 +25,14 @@ export function Tab1Incident() {
         currentStep?.predicted_center.lon ?? prediction.predicted_center.lon,
         currentStep?.predicted_center.lat ?? prediction.predicted_center.lat,
       ]
-    : [
-        predictionRequest.last_coordinate?.lon ?? 127.0,
-        predictionRequest.last_coordinate?.lat ?? 36.5,
-      ];
+    : (() => {
+        const lon = predictionRequest.last_coordinate?.lon;
+        const lat = predictionRequest.last_coordinate?.lat;
+        return [
+          lon != null && !isNaN(lon) ? lon : 127.0,
+          lat != null && !isNaN(lat) ? lat : 36.5,
+        ] as [number, number];
+      })();
 
   const searchZones = currentStep?.search_zones ?? prediction?.search_zones;
   const predictedCenter = currentStep?.predicted_center ?? prediction?.predicted_center;
