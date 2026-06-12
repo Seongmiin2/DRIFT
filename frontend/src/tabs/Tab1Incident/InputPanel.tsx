@@ -28,11 +28,14 @@ export function InputPanel() {
     setError(null);
     setIsSubmitting(true);
     try {
+      const defaultCoord = { lon: 124.372, lat: 37.959 };
+      const actualCoord = predictionRequest.last_coordinate ?? defaultCoord;
+      // Keep store in sync so Tab1 can render the marker/sector
+      if (!predictionRequest.last_coordinate) {
+        setPredictionRequest({ last_coordinate: actualCoord });
+      }
       const req = {
-        last_coordinate: predictionRequest.last_coordinate ?? {
-          lon: 124.372,
-          lat: 37.959,
-        },
+        last_coordinate: actualCoord,
         last_seen_at:
           predictionRequest.last_seen_at ?? new Date().toISOString(),
         vessel_type: predictionRequest.vessel_type ?? "소형어선",

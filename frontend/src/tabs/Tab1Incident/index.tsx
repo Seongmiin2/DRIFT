@@ -38,16 +38,30 @@ export function Tab1Incident() {
     ?.filter((s) => s.hours <= selectedTimeStepHour)
     .map((s) => s.predicted_center) ?? [];
 
-  // Last known signal position (input origin)
-  const lastKnownPosition = predictionRequest.last_coordinate;
+  // Last known signal position — use store value or back-calculate from prediction
+  const lastKnownPosition: { lat: number; lon: number } | undefined =
+    predictionRequest.last_coordinate ??
+    (prediction
+      ? (() => {
+          const dv = prediction.drift_vector;
+          const h = prediction.time_horizon_hours;
+          const nm = dv.speed_knots * h;
+          const rad = (dv.direction_deg * Math.PI) / 180;
+          const cosLat = Math.cos((prediction.predicted_center.lat * Math.PI) / 180);
+          return {
+            lat: prediction.predicted_center.lat - (nm * Math.cos(rad)) / 60,
+            lon: prediction.predicted_center.lon - (nm * Math.sin(rad)) / (60 * cosLat),
+          };
+        })()
+      : undefined);
 
-  // Uncertainty sector from origin
+  // Uncertainty sector: fan from origin, scales with time slider
   const driftSector = prediction && lastKnownPosition
     ? {
         origin: lastKnownPosition,
         directionDeg: prediction.drift_vector.direction_deg,
-        halfAngleDeg: 22,
-        distanceNm: (prediction.drift_vector.speed_knots * selectedTimeStepHour) * 1.5,
+        halfAngleDeg: 30,
+        distanceNm: prediction.drift_vector.speed_knots * selectedTimeStepHour * 2.5,
       }
     : undefined;
 

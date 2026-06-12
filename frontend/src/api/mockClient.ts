@@ -125,15 +125,15 @@ interface AreaDef {
 
 const SEA_AREAS: Record<string, AreaDef> = {
   "연평도 인근 서해":  { bbox: [124.1, 37.6, 124.9, 38.3], maxWind: 16.2, maxWave: 1.9, baseDri: 0.78, peakOffsetH: 1 },
-  "인천/경기만":       { bbox: [126.0, 37.0, 127.2, 37.8], maxWind: 12.5, maxWave: 1.2, baseDri: 0.55, peakOffsetH: 2 },
-  "목포/신안 해역":    { bbox: [125.8, 34.5, 126.8, 35.2], maxWind: 14.0, maxWave: 2.1, baseDri: 0.65, peakOffsetH: 1 },
-  "군산/새만금":       { bbox: [126.0, 35.8, 127.0, 36.5], maxWind: 10.5, maxWave: 1.0, baseDri: 0.42, peakOffsetH: 3 },
-  "여수/거문도":       { bbox: [127.2, 34.0, 128.2, 34.8], maxWind: 11.8, maxWave: 1.5, baseDri: 0.51, peakOffsetH: 2 },
-  "부산/영도":         { bbox: [128.8, 34.8, 129.8, 35.5], maxWind:  9.5, maxWave: 1.0, baseDri: 0.38, peakOffsetH: 4 },
-  "포항/영일만":       { bbox: [129.0, 35.8, 130.0, 36.5], maxWind: 13.5, maxWave: 1.8, baseDri: 0.62, peakOffsetH: 2 },
-  "속초/고성":         { bbox: [128.4, 38.0, 129.4, 38.8], maxWind: 18.5, maxWave: 2.8, baseDri: 0.82, peakOffsetH: 1 },
-  "제주도 서방":       { bbox: [126.0, 33.0, 126.8, 33.8], maxWind: 20.5, maxWave: 3.2, baseDri: 0.90, peakOffsetH: 1 },
-  "제주도 동방":       { bbox: [126.8, 33.0, 127.6, 33.8], maxWind: 15.5, maxWave: 2.5, baseDri: 0.70, peakOffsetH: 2 },
+  "인천/경기만":       { bbox: [124.5, 37.0, 126.0, 37.8], maxWind: 12.5, maxWave: 1.2, baseDri: 0.55, peakOffsetH: 2 },
+  "목포/신안 해역":    { bbox: [125.2, 33.8, 126.2, 34.8], maxWind: 14.0, maxWave: 2.1, baseDri: 0.65, peakOffsetH: 1 },
+  "군산/새만금":       { bbox: [125.0, 35.4, 126.3, 36.2], maxWind: 10.5, maxWave: 1.0, baseDri: 0.42, peakOffsetH: 3 },
+  "여수/거문도":       { bbox: [126.8, 33.5, 127.8, 34.5], maxWind: 11.8, maxWave: 1.5, baseDri: 0.51, peakOffsetH: 2 },
+  "부산/영도":         { bbox: [128.5, 33.5, 130.5, 34.7], maxWind:  9.5, maxWave: 1.0, baseDri: 0.38, peakOffsetH: 4 },
+  "포항/영일만":       { bbox: [129.5, 35.5, 131.0, 36.7], maxWind: 13.5, maxWave: 1.8, baseDri: 0.62, peakOffsetH: 2 },
+  "속초/고성":         { bbox: [129.0, 37.8, 130.5, 38.9], maxWind: 18.5, maxWave: 2.8, baseDri: 0.82, peakOffsetH: 1 },
+  "제주도 서방":       { bbox: [125.5, 32.5, 126.5, 33.5], maxWind: 20.5, maxWave: 3.2, baseDri: 0.90, peakOffsetH: 1 },
+  "제주도 동방":       { bbox: [127.0, 32.5, 128.2, 33.5], maxWind: 15.5, maxWave: 2.5, baseDri: 0.70, peakOffsetH: 2 },
 };
 
 function simpleHash(s: string): number {
@@ -153,14 +153,26 @@ function buildRiskGrid(
   const dLon = (maxLon - minLon) / COLS;
   const dLat = (maxLat - minLat) / ROWS;
 
+  // Deterministic risk hotspot position per area
+  const areaSeed = simpleHash(areaName);
+  const hotspotCol = (areaSeed % 100) / 100;
+  const hotspotRow = ((areaSeed >> 8) % 100) / 100;
+
   const features: GeoJSONFeatureCollection<RiskGridCellProperties>["features"] = [];
 
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      const seed = simpleHash(`${areaName}-${row}-${col}`);
-      // Vary ±0.35 around baseDri, clamp 0–1
-      const noise = ((seed % 1000) / 1000 - 0.5) * 0.70;
-      const dri = Math.max(0.05, Math.min(0.98, baseDri + noise));
+      // Distance from hotspot drives spatial gradient (0 = hotspot, 1 = far corner)
+      const nCol = (col + 0.5) / COLS;
+      const nRow = (row + 0.5) / ROWS;
+      const dist = Math.sqrt((nCol - hotspotCol) ** 2 + (nRow - hotspotRow) ** 2) / Math.SQRT2;
+      const spatialFactor = 1 - dist * 0.75;
+
+      // Per-cell noise for natural variation
+      const cellSeed = simpleHash(`${areaName}-${row}-${col}`);
+      const noise = ((cellSeed % 1000) / 1000 - 0.5) * 0.50;
+
+      const dri = Math.max(0.05, Math.min(0.97, baseDri * spatialFactor + noise));
       const risk_level =
         dri >= 0.65 ? "고위험" : dri >= 0.38 ? "주의" : "관찰";
 
