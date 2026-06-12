@@ -339,6 +339,7 @@ class RiskForecastResult(BaseModel):
 
     max_wind_speed_ms: float = Field(..., ge=0.0)
     max_wave_height_m: float = Field(..., ge=0.0)
+    max_current_speed_kt: float = Field(..., ge=0.0)
     tidal_reversal_time: datetime | None = Field(
         None,
         description="Next tidal reversal within the forecast window, if applicable",

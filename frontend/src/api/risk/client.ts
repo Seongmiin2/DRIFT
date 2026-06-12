@@ -12,13 +12,14 @@ async function get<T>(path: string, params?: Record<string, string>): Promise<T>
 }
 
 export const riskClient = {
-  getRiskForecast: (params?: { area_name?: string }) => {
+  getRiskForecast: (params?: { area_name?: string; time_range_start?: string }) => {
     const area = params?.area_name ?? "";
     const bbox = SEA_AREAS[area]?.bbox.join(",");
     return get<RiskForecastResult>("/api/v1/risk/forecast/", {
       ...(area && { area_name: area }),
       ...(bbox && { bbox }),
       vessel_types: "소형어선,표준어선",
+      ...(params?.time_range_start && { time_range_start: params.time_range_start }),
     });
   },
 };

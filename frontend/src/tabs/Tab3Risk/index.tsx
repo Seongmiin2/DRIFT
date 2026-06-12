@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
 import { api } from "@/api";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
@@ -30,10 +30,6 @@ interface HotspotProperties {
   dominant_type:  string;
 }
 
-const HOTSPOT_STYLE: Record<HotspotZone, L.PathOptions> = {
-  "사고다발구역": { color: "#a855f7", fillOpacity: 0, weight: 3, opacity: 1 },
-  "주의구역":    { color: "#c084fc", fillOpacity: 0, weight: 1.5, dashArray: "6,4", opacity: 0.85 },
-};
 
 import type { PathOptions } from "leaflet";
 
@@ -57,6 +53,8 @@ export function Tab3Risk() {
   const [landReady, setLandReady] = useState(false);
   const [showHotspots, setShowHotspots] = useState(true);
   const [allHotspots, setAllHotspots] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [forecastHours, setForecastHours] = useState(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 육지 GeoJSON 로드
   useEffect(() => {
@@ -71,8 +69,10 @@ export function Tab3Risk() {
       .catch(console.error);
   }, []);
 
-  // 해역 변경 시 API 호출
+  // 해역 변경 시 슬라이더 초기화 + API 호출
   useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setForecastHours(0);
     setRiskForecast(null);
     setError(null);
     setLoading(true);
@@ -81,6 +81,30 @@ export function Tab3Risk() {
       .catch((e) => setError(e?.message ?? "서버 연결 실패"))
       .finally(() => setLoading(false));
   }, [selectedArea]);
+
+  // 슬라이더 변경 → 400ms 디바운스 후 API 재호출
+  const handleSliderChange = useCallback((hours: number) => {
+    setForecastHours(hours);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setRiskForecast(null);
+      setError(null);
+      setLoading(true);
+      const timeStr = hours > 0
+        ? new Date(Date.now() + hours * 3600_000).toISOString()
+        : undefined;
+      api.getRiskForecast({ area_name: selectedArea, time_range_start: timeStr })
+        .then(setRiskForecast)
+        .catch((e) => setError(e?.message ?? "서버 연결 실패"))
+        .finally(() => setLoading(false));
+    }, 400);
+  }, [selectedArea]);
+
+  // 슬라이더 기준 예측 대상 시각 (KST 표시용)
+  const targetTime = useMemo(
+    () => new Date(Date.now() + forecastHours * 3600_000),
+    [forecastHours],
+  );
 
   // 육지 셀 필터링
   const filteredForecast = useMemo<RiskForecastResult | null>(() => {
@@ -98,9 +122,9 @@ export function Tab3Risk() {
   const bbox = SEA_AREAS[selectedArea]?.bbox ?? [126.0, 34.0, 127.0, 35.0];
   const mapCenter: [number, number] = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
 
-  // 선택 해역 bbox 내 사고다발구역 필터링
+  // 선택 해역 bbox 내 사고다발구역 필터링 (항상 계산 — DRI 히트맵 기반으로 사용)
   const areaHotspots = useMemo<GeoJSON.FeatureCollection | null>(() => {
-    if (!showHotspots || !allHotspots) return null;
+    if (!allHotspots) return null;
     const [minLon, minLat, maxLon, maxLat] = bbox;
     const features = allHotspots.features.filter((f) => {
       const coords = (f.geometry as GeoJSON.Polygon).coordinates[0];
@@ -109,7 +133,70 @@ export function Tab3Risk() {
       return cx >= minLon && cx <= maxLon && cy >= minLat && cy <= maxLat;
     });
     return { type: "FeatureCollection", features };
-  }, [allHotspots, showHotspots, selectedArea]);
+  }, [allHotspots, selectedArea]);
+
+  // fill opacity 정규화를 위한 해역 내 최대 사고 건수
+  const maxAccidentCount = useMemo(() => {
+    if (!areaHotspots || areaHotspots.features.length === 0) return 1;
+    return Math.max(...areaHotspots.features.map((f) => (f.properties as HotspotProperties).accident_count));
+  }, [areaHotspots]);
+
+  // 전국 사고다발구역 식별에 사용된 총 사고 건수
+  const totalAccidentCount = useMemo(() => {
+    if (!allHotspots) return null;
+    return allHotspots.features.reduce(
+      (sum, f) => sum + ((f.properties as HotspotProperties).accident_count ?? 0), 0,
+    );
+  }, [allHotspots]);
+
+  // 사고 셀 주변 1칸 버퍼 셀 (hotspot에 포함되지 않은 이웃 셀만)
+  const areaBufferCells = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!areaHotspots || areaHotspots.features.length === 0) return null;
+    const CS = 0.05; // CELL_SIZE (accidentHotspots.json 생성 기준)
+    const round5 = (v: number) => Math.round(v * 100000) / 100000;
+
+    // 기존 hotspot 셀 키 (lon0,lat0 기준)
+    const hotspotKeys = new Set<string>();
+    for (const f of areaHotspots.features) {
+      const c = (f.geometry as GeoJSON.Polygon).coordinates[0];
+      hotspotKeys.add(`${c[0][0]},${c[0][1]}`);
+    }
+
+    const bufferKeys = new Set<string>();
+    const features: GeoJSON.Feature[] = [];
+
+    for (const f of areaHotspots.features) {
+      const c = (f.geometry as GeoJSON.Polygon).coordinates[0];
+      const lon0 = c[0][0];
+      const lat0 = c[0][1];
+
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nLon0 = round5(lon0 + dc * CS);
+          const nLat0 = round5(lat0 + dr * CS);
+          const key = `${nLon0},${nLat0}`;
+          if (hotspotKeys.has(key) || bufferKeys.has(key)) continue;
+          bufferKeys.add(key);
+          const nLon1 = round5(nLon0 + CS);
+          const nLat1 = round5(nLat0 + CS);
+          features.push({
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "Polygon",
+              coordinates: [[
+                [nLon0, nLat0], [nLon1, nLat0],
+                [nLon1, nLat1], [nLon0, nLat1],
+                [nLon0, nLat0],
+              ]],
+            },
+          });
+        }
+      }
+    }
+    return { type: "FeatureCollection", features };
+  }, [areaHotspots]);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -151,7 +238,7 @@ export function Tab3Risk() {
                 {[
                   { label: "최대 풍속", value: `${riskForecast.max_wind_speed_ms} m/s` },
                   { label: "최대 파고", value: `${riskForecast.max_wave_height_m} m` },
-                  { label: "위험 선박", value: `${riskForecast.vessels_at_risk_count}척` },
+                  { label: "조류 속도", value: `${riskForecast.max_current_speed_kt} kt` },
                   { label: "고위험 면적", value: `${riskForecast.high_risk_area_km2} km²` },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-navy-800 border border-navy-700 rounded p-2">
@@ -189,7 +276,58 @@ export function Tab3Risk() {
             />
             <RecenterView center={mapCenter} zoom={9} />
 
-            {filteredForecast && (
+            {/* 사고 셀 주변 1칸 버퍼 — 낮은 불투명도로 위험 영역 확장 표현 */}
+            {areaBufferCells && areaBufferCells.features.length > 0 && riskForecast && (
+              <GeoJSON
+                key={`dri-buffer-${selectedArea}-${riskForecast.forecasted_at}`}
+                data={areaBufferCells as unknown as GeoJSON.FeatureCollection}
+                style={() => {
+                  const dri = riskForecast.dri_score;
+                  const color = dri >= 0.60 ? "#ef4444" : dri >= 0.30 ? "#f59e0b" : "#22c55e";
+                  return { fillColor: color, fillOpacity: 0.14, color, weight: 0.3, opacity: 0.35 } as PathOptions;
+                }}
+              />
+            )}
+
+            {/* DRI 히트맵 — 사고다발/주의구역 셀 기반, 채도=사고 빈도, 색=DRI 수준 */}
+            {areaHotspots && areaHotspots.features.length > 0 && riskForecast && (
+              <GeoJSON
+                key={`dri-hotspot-${selectedArea}-${riskForecast.forecasted_at}-${showHotspots}`}
+                data={areaHotspots as unknown as GeoJSON.FeatureCollection}
+                style={(feature) => {
+                  const p = (feature?.properties ?? {}) as HotspotProperties;
+                  const dri = riskForecast.dri_score;
+                  const color = dri >= 0.60 ? "#ef4444" : dri >= 0.30 ? "#f59e0b" : "#22c55e";
+                  const intensity = Math.min(1, p.accident_count / maxAccidentCount);
+                  const fillOpacity = p.zone === "사고다발구역"
+                    ? 0.18 + intensity * 0.17   // 0.18–0.35
+                    : 0.15 + intensity * 0.08;  // 0.15–0.23
+                  // showHotspots ON: 보라색 구분 테두리 / OFF: DRI 색 얇은 테두리
+                  const outlineColor = showHotspots
+                    ? (p.zone === "사고다발구역" ? "#a855f7" : "#c084fc")
+                    : color;
+                  const outlineWeight = showHotspots
+                    ? (p.zone === "사고다발구역" ? 2.5 : 1.5)
+                    : 0.5;
+                  const dashArray = showHotspots && p.zone === "주의구역" ? "6,4" : undefined;
+                  return { fillColor: color, fillOpacity, color: outlineColor, weight: outlineWeight, opacity: 0.85, dashArray } as PathOptions;
+                }}
+                onEachFeature={(feature, layer) => {
+                  const p = feature.properties as HotspotProperties;
+                  const dri = riskForecast.dri_score;
+                  const driPct = Math.round(dri * 100);
+                  const lvl = dri >= 0.60 ? "고위험" : dri >= 0.30 ? "주의" : "관찰";
+                  const fatalInfo = p.fatal_count > 0 ? ` · 사망·실종 ${p.fatal_count}명` : "";
+                  layer.bindTooltip(
+                    `<b>${p.zone}</b> — DRI ${driPct} (${lvl})<br/>2011–2023년 ${p.accident_count}건${fatalInfo}<br/>주요 원인: ${p.dominant_cause}<br/>주요 유형: ${p.dominant_type}`,
+                    { className: "risk-tooltip", sticky: true },
+                  );
+                }}
+              />
+            )}
+
+            {/* 사고 이력 없는 해역: 기존 격자 폴백 */}
+            {filteredForecast && (!areaHotspots || areaHotspots.features.length === 0) && (
               <GeoJSON
                 key={filteredForecast.area_name + filteredForecast.forecasted_at}
                 data={filteredForecast.risk_grid as unknown as GeoJSON.FeatureCollection}
@@ -206,27 +344,44 @@ export function Tab3Risk() {
                 }}
               />
             )}
-
-            {/* 사고다발구역 레이어 */}
-            {areaHotspots && areaHotspots.features.length > 0 && (
-              <GeoJSON
-                key={`hotspots-${selectedArea}-${showHotspots}`}
-                data={areaHotspots as unknown as GeoJSON.FeatureCollection}
-                style={(feature) => {
-                  const zone = (feature?.properties as HotspotProperties).zone;
-                  return (HOTSPOT_STYLE[zone] ?? HOTSPOT_STYLE["주의구역"]) as PathOptions;
-                }}
-                onEachFeature={(feature, layer) => {
-                  const p = feature.properties as HotspotProperties;
-                  const fatalInfo = p.fatal_count > 0 ? ` · 사망·실종 ${p.fatal_count}명` : "";
-                  layer.bindTooltip(
-                    `<b>${p.zone}</b><br/>2011–2023년 ${p.accident_count}건${fatalInfo}<br/>주요 원인: ${p.dominant_cause}<br/>주요 유형: ${p.dominant_type}`,
-                    { className: "risk-tooltip", sticky: true },
-                  );
-                }}
-              />
-            )}
           </MapContainer>
+
+          {/* 타임라인 슬라이더 + 데이터 출처 (좌하단) */}
+          <div className="absolute bottom-6 left-3 z-[1000] flex flex-col gap-2 w-72">
+            <div className="bg-navy-900/90 border border-navy-700 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-cyan-400">예측 시점</p>
+                <span className="text-xs text-slate-300">
+                  {forecastHours === 0 ? "현재" : `+${forecastHours}h`}
+                  {" · "}
+                  {targetTime.toLocaleString("ko-KR", {
+                    month: "numeric", day: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0} max={72} step={6}
+                value={forecastHours}
+                onChange={(e) => handleSliderChange(Number(e.target.value))}
+                className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-cyan-400"
+                style={{ background: `linear-gradient(to right, #22d3ee ${(forecastHours / 72) * 100}%, #1e293b ${(forecastHours / 72) * 100}%)` }}
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1.5 select-none">
+                <span>지금</span>
+                <span>+1일</span>
+                <span>+2일</span>
+                <span>+3일</span>
+              </div>
+            </div>
+            {totalAccidentCount !== null && (
+              <p className="text-[10px] text-slate-500 leading-relaxed pl-1 pointer-events-none">
+                <span className="font-semibold text-slate-400">{totalAccidentCount.toLocaleString()}건</span>
+                {" "}해상사고 데이터 기반 (2011–2023, 사고다발·주의구역 한정)
+              </p>
+            )}
+          </div>
 
           {/* 로딩 오버레이 */}
           {loading && (
@@ -373,11 +528,13 @@ export function Tab3Risk() {
                   <span className="text-slate-300">{lvl}</span>
                 </div>
               ))}
-              {filteredForecast && (
+              {areaHotspots && areaHotspots.features.length > 0 ? (
+                <p className="mt-1.5 text-[10px] text-slate-500">채도 = 사고 빈도 (진할수록 높음)</p>
+              ) : filteredForecast ? (
                 <div className="mt-2 pt-2 border-t border-navy-700 space-y-0.5">
                   <GridCounts forecast={filteredForecast} />
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

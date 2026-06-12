@@ -324,6 +324,7 @@ def forecast_risk(
         recommended_actions=actions,
         max_wind_speed_ms=wind_ms,
         max_wave_height_m=wave_h,
+        max_current_speed_kt=round(current_kt, 2),
         tidal_reversal_time=tidal_time,
         vessels_at_risk_count=vessels,
         high_risk_area_km2=high_area,

@@ -146,6 +146,7 @@ export interface RiskForecastResult {
   recommended_actions: RecommendedAction[];
   max_wind_speed_ms: number;
   max_wave_height_m: number;
+  max_current_speed_kt: number;
   tidal_reversal_time?: string | null;
   vessels_at_risk_count: number;
   high_risk_area_km2: number;

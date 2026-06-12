@@ -88,48 +88,58 @@ function buildRiskGrid(
   return { type: "FeatureCollection", features };
 }
 
-function buildRiskForecast(areaName?: string): RiskForecastResult {
+function buildRiskForecast(areaName?: string, timeRangeStart?: string): RiskForecastResult {
   const name = areaName && areaName in SEA_AREAS ? areaName : "연평도 인근 서해";
   const def = SEA_AREAS[name];
   const now = new Date();
-  const peakTime = new Date(now.getTime() + def.peakOffsetH * 3600_000);
-  const endTime = new Date(now.getTime() + 3 * 3600_000);
-  const tidalTime = new Date(now.getTime() + (def.peakOffsetH + 0.5) * 3600_000);
+  const targetTime = timeRangeStart ? new Date(timeRangeStart) : now;
+  const forecastH = Math.round((targetTime.getTime() - now.getTime()) / 3600_000);
+  // 시간대별 DRI 변동: 6h 주기 sine 변동 ±20%
+  const variation = Math.sin(forecastH * Math.PI / 36) * 0.20;
+  const adjustedDri = Math.max(0.05, Math.min(0.97, def.baseDri + variation));
+  const adjustedWind = Math.max(1, def.maxWind * (0.85 + (variation + 0.20) / 2));
+  const adjustedWave = Math.max(0.1, def.maxWave * (0.85 + (variation + 0.20) / 2));
+  const peakTime = new Date(targetTime.getTime() + def.peakOffsetH * 3600_000);
+  const endTime = new Date(targetTime.getTime() + 3 * 3600_000);
+  const tidalTime = new Date(targetTime.getTime() + (def.peakOffsetH + 0.5) * 3600_000);
   const highCount = simpleHash(`${name}-vessels`) % 120 + 30;
-  const highArea = parseFloat((def.baseDri * 40 + 10).toFixed(1));
+  const highArea = parseFloat((adjustedDri * 40 + 10).toFixed(1));
 
-  const windSev: "고위험" | "주의" | "관찰" = def.maxWind >= 14 ? "고위험" : def.maxWind >= 10 ? "주의" : "관찰";
-  const waveSev: "고위험" | "주의" | "관찰" = def.maxWave >= 2.0 ? "고위험" : def.maxWave >= 1.5 ? "주의" : "관찰";
+  const windSev: "고위험" | "주의" | "관찰" = adjustedWind >= 14 ? "고위험" : adjustedWind >= 10 ? "주의" : "관찰";
+  const waveSev: "고위험" | "주의" | "관찰" = adjustedWave >= 2.0 ? "고위험" : adjustedWave >= 1.5 ? "주의" : "관찰";
   const tidalHH = String(peakTime.getHours()).padStart(2, "0");
   const tidalMM = String(peakTime.getMinutes()).padStart(2, "0");
 
-  const windDesc = def.maxWind >= 14
-    ? `${def.maxWind} m/s — 소형어선 귀항 권고 수준, 출항 통제 검토`
-    : def.maxWind >= 10
-    ? `${def.maxWind} m/s — 조업 한계 근접, 낚시어선 출항 주의`
-    : `${def.maxWind} m/s — 정상 운항 가능 (소형어선 한계 10 m/s)`;
+  const w = parseFloat(adjustedWind.toFixed(1));
+  const wv = parseFloat(adjustedWave.toFixed(1));
 
-  const waveDesc = def.maxWave >= 2.0
-    ? `유의파고 ${def.maxWave} m — 소형어선 안전기준(2 m) 초과, 전복 위험`
-    : def.maxWave >= 1.5
-    ? `유의파고 ${def.maxWave} m — 낚시어선 제한기준(1.5 m) 초과, 선체 동요 주의`
-    : `유의파고 ${def.maxWave} m — 관찰 수준 (낚시어선 기준 1.5 m 이하)`;
+  const windDesc = w >= 14
+    ? `${w} m/s — 소형어선 귀항 권고 수준, 출항 통제 검토`
+    : w >= 10
+    ? `${w} m/s — 조업 한계 근접, 낚시어선 출항 주의`
+    : `${w} m/s — 정상 운항 가능 (소형어선 한계 10 m/s)`;
+
+  const waveDesc = wv >= 2.0
+    ? `유의파고 ${wv} m — 소형어선 안전기준(2 m) 초과, 전복 위험`
+    : wv >= 1.5
+    ? `유의파고 ${wv} m — 낚시어선 제한기준(1.5 m) 초과, 선체 동요 주의`
+    : `유의파고 ${wv} m — 관찰 수준 (낚시어선 기준 1.5 m 이하)`;
 
   // Action 1 — 가장 심각한 요인 기반
-  const waveEst = parseFloat((0.0248 * def.maxWind ** 2).toFixed(1));
+  const waveEst = parseFloat((0.0248 * w ** 2).toFixed(1));
   let act1: { priority: number; action: string; target: string };
-  if (def.maxWind >= 14) {
+  if (w >= 14) {
     act1 = { priority: 1, action: "소형어선 출항 통제 요청",
-      target: `실측 풍속 ${def.maxWind} m/s — 소형어선 운항한계(14 m/s) 초과, 관할 어항 출항 금지 공문 발송` };
+      target: `예측 풍속 ${w} m/s — 소형어선 운항한계(14 m/s) 초과, 관할 어항 출항 금지 공문 발송` };
   } else if (waveEst >= 2.0) {
     act1 = { priority: 1, action: "소형어선 운항 제한 발령",
       target: `추정 유의파고 ${waveEst} m — 소형어선 안전기준(2.0 m) 초과, 낚시어선 포함 즉시 귀항 권고` };
-  } else if (def.maxWind >= 10) {
+  } else if (w >= 10) {
     act1 = { priority: 1, action: "낚시어선 출항 자제 권고",
-      target: `실측 풍속 ${def.maxWind} m/s — 낚시어선 운항주의보 기준(10 m/s) 초과, 자발적 귀항 유도` };
+      target: `예측 풍속 ${w} m/s — 낚시어선 운항주의보 기준(10 m/s) 초과, 자발적 귀항 유도` };
   } else {
     act1 = { priority: 1, action: "기상 모니터링 강화",
-      target: `현재 풍속 ${def.maxWind} m/s — 3시간 간격 재분석, 임계치 도달 시 즉시 경보 전환` };
+      target: `예측 풍속 ${w} m/s — 3시간 간격 재분석, 임계치 도달 시 즉시 경보 전환` };
   }
 
   // Action 2 — peakTime 기반 타이밍
@@ -150,11 +160,11 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
   }
 
   // Action 3 — DRI 수준별 통신 프로토콜
-  const driPct = Math.round(def.baseDri * 100);
-  const act3 = def.baseDri >= 0.60
+  const driPct = Math.round(adjustedDri * 100);
+  const act3 = adjustedDri >= 0.60
     ? { priority: 3, action: "VHF Ch.16 긴급 경보 방송",
         target: `DRI ${driPct}점(고위험) — 해당 해역 전 선박 대상 출항 금지·항만 입항 안내 송출` }
-    : def.baseDri >= 0.30
+    : adjustedDri >= 0.30
     ? { priority: 3, action: "해양경계방송 출항 자제 안내",
         target: `DRI ${driPct}점(주의) — 소형선 출항 자제 및 기상 악화 대비 안전 점검 권고` }
     : { priority: 3, action: "정기 위치 보고 독려",
@@ -163,25 +173,26 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
   const actions = [act1, act2, act3];
 
   return {
-    forecast_id: `mock-${simpleHash(name).toString(16).slice(0, 8)}`,
+    forecast_id: `mock-${simpleHash(name + forecastH).toString(16).slice(0, 8)}`,
     forecasted_at: now.toISOString(),
     area_name: name,
     bbox: def.bbox,
-    time_range_start: now.toISOString(),
+    time_range_start: targetTime.toISOString(),
     time_range_end: endTime.toISOString(),
     peak_risk_time: peakTime.toISOString(),
     vessel_types_targeted: ["소형어선", "레저보트"],
-    risk_grid: buildRiskGrid(def.bbox, name, def.baseDri),
-    dri_score: def.baseDri,
-    dri_percentile: parseFloat((def.baseDri * 100).toFixed(1)),
+    risk_grid: buildRiskGrid(def.bbox, name, adjustedDri),
+    dri_score: adjustedDri,
+    dri_percentile: parseFloat((adjustedDri * 100).toFixed(1)),
     risk_causes: [
       { factor: "풍속",     description: windDesc, severity: windSev },
       { factor: "파고",     description: waveDesc, severity: waveSev },
-      { factor: "조류 반전", description: `${tidalHH}:${tidalMM} 조류 반전 예정 — 표류체 방향 급변, 협수로 주의`, severity: def.baseDri >= 0.65 ? "고위험" : "주의" },
+      { factor: "조류 반전", description: `${tidalHH}:${tidalMM} 조류 반전 예정 — 표류체 방향 급변, 협수로 주의`, severity: adjustedDri >= 0.65 ? "고위험" : "주의" },
     ],
     recommended_actions: actions,
-    max_wind_speed_ms: def.maxWind,
-    max_wave_height_m: def.maxWave,
+    max_wind_speed_ms: w,
+    max_wave_height_m: wv,
+    max_current_speed_kt: parseFloat((def.baseDri * 1.5 * (0.85 + (variation + 0.20) / 2)).toFixed(2)),
     tidal_reversal_time: tidalTime.toISOString(),
     vessels_at_risk_count: highCount,
     high_risk_area_km2: highArea,
@@ -191,6 +202,6 @@ function buildRiskForecast(areaName?: string): RiskForecastResult {
 // ── Exported mock ──────────────────────────────────────────────────────────
 
 export const riskMock = {
-  getRiskForecast: (params?: { area_name?: string }) =>
-    delay(600, buildRiskForecast(params?.area_name)),
+  getRiskForecast: (params?: { area_name?: string; time_range_start?: string }) =>
+    delay(600, buildRiskForecast(params?.area_name, params?.time_range_start)),
 };
