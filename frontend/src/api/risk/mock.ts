@@ -41,8 +41,8 @@ function buildRiskGrid(
   baseDri: number,
 ): GeoJSONFeatureCollection<RiskGridCellProperties> {
   const [minLon, minLat, maxLon, maxLat] = bbox;
-  const COLS = 6;
-  const ROWS = 5;
+  const COLS = 14;
+  const ROWS = 12;
   const dLon = (maxLon - minLon) / COLS;
   const dLat = (maxLat - minLat) / ROWS;
 
