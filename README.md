@@ -1,12 +1,76 @@
 # DRIFT
 
-DRIFT is a maritime search-and-rescue decision-support demo. It combines
-deterministic drift physics, OpenDrift particle simulation, a synthetic
-LightGBM residual model, proactive risk visualization, and an optional GMS
-OpenAI-compatible incident assistant.
+DRIFT is an AI-powered maritime search-and-rescue decision support system that predicts probable search areas for missing persons 
+or vessels using ocean-current simulation, drift physics, and machine learning.
+The system combines deterministic physics, OpenDrift particle simulation, 
+and a LightGBM correction model to support faster and more efficient maritime rescue operations.
 
 > The L3 model is trained on synthetic demo data. It demonstrates the model
 > pipeline and must not be presented as validated real-world SAR accuracy.
+
+## Features
+
+- Physics-based maritime drift prediction
+- OpenDrift particle simulation
+- AI-based LightGBM residual correction
+- Interactive search-area visualization
+- Historical replay using bundled marine datasets
+- Optional GMS OpenAI-compatible incident assistant
+
+## Tech Stack
+
+### Frontend
+- React
+- TypeScript
+- Vite
+- Leaflet
+
+### Backend
+- Django
+- Django REST Framework
+- PostgreSQL
+- Redis
+
+### AI & Simulation
+- OpenDrift
+- LightGBM
+- Scikit-learn
+
+### Data
+- CMEMS
+- KHOA
+- Git LFS
+
+### Infrastructure
+- Docker
+- Docker Compose
+
+## System Architecture
+
+```text
+Frontend (React)
+        │
+        ▼
+Backend (Django REST API)
+        │
+        ▼
+Historical / Live Data Provider
+        │
+        ▼
+L1 Drift Physics
+        │
+        ▼
+L2 OpenDrift Simulation
+        │
+        ▼
+Land Mask Filtering
+        │
+        ▼
+L3 LightGBM Correction
+        │
+        ▼
+Search Area Visualization
+```
 
 ## Repository Layout
 
@@ -18,6 +82,51 @@ engine/     L1 physics, L2 OpenDrift, and L3 correction model
 frontend/   React, TypeScript, Vite, Leaflet, and nginx
 docs/       Model and architecture documentation
 scripts/    Utility scripts
+```
+
+## Data Sources
+
+Historical and environmental datasets used for drift simulation, search-area prediction, and AI-based correction.
+
+| Dataset | Purpose |
+|----------|---------|
+| CMEMS | Ocean current data |
+| KHOA | Marine environmental data |
+| Leeway Catalog | Object-specific drift coefficients |
+| Land Mask | Coastline filtering |
+| Synthetic Dataset | Training the LightGBM residual correction model |
+
+## Data Pipeline
+
+```text
+CMEMS / KHOA / Leeway / Land Mask
+                │
+                ▼
+        Data Collection
+                │
+                ▼
+       Data Preprocessing
+                │
+                ▼
+ Historical Data Provider
+                │
+                ▼
+        L1 Drift Physics
+                │
+                ▼
+   L2 OpenDrift Simulation
+                │
+                ▼
+    Land Mask Filtering
+                │
+                ▼
+ L3 LightGBM Correction
+                │
+                ▼
+ Search Area Prediction
+                │
+                ▼
+ Frontend Visualization
 ```
 
 ## Quick Start
